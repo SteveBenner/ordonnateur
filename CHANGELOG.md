@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-10-26
+
 ### Added
 
+- The README shows the web app's map view under its opening paragraph (`assets/ordonnateur-web.png`, the original
+  2040×1291 screenshot, linked to itself at full size). Why: the layout of hooks by source and event shows what
+  ordonnateur does faster than the command list does.
 - ordonnateur is published on GitHub at `SteveBenner/ordonnateur` under the MIT license (`LICENSE`). The README's
   install steps start with the `git clone` into `~/.rplugins/ordonnateur`. Why: the install steps assumed a copy was
   already on disk, and without a license nobody could legally reuse the published code.

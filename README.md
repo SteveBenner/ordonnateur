@@ -5,6 +5,8 @@
 A plugin built on [rplugin](https://github.com/SteveBenner/rplugin). ordonnateur puts each harness event's hooks in
 the order you choose, and lists, lints, times and test-fires every hook.
 
+[![The ordonnateur web app's map view: every Claude Code and Codex hook laid out by source and event, with guards and policy-protected hooks locked and each hook's trust status, matcher, timeout and p95](assets/ordonnateur-web.png)](assets/ordonnateur-web.png)
+
 ## Why order needs a dispatcher
 
 Claude Code runs matching hooks concurrently: "When an event fires, its matching hooks run in parallel." Codex does

@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "ordonnateur",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Puts each harness event's hooks in the order you choose, and lists, lints, times and test-fires every hook.",
   "repository": "https://github.com/SteveBenner/ordonnateur",
   "license": "MIT",
