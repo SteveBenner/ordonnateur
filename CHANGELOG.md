@@ -10,11 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - ordonnateur is published on GitHub at `SteveBenner/ordonnateur` under the MIT license (`LICENSE`). The README's
-  install steps start with the `git clone` into `~/.rplugins/ordonnateur`.
+  install steps start with the `git clone` into `~/.rplugins/ordonnateur`. Why: the install steps assumed a copy was
+  already on disk, and without a license nobody could legally reuse the published code.
+- The manifest declares `license: MIT`, and `rplugin package` writes it into `plugin.json`,
+  `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`. Why: the license then has one source, and `rplugin
+  check` holds the three files to it.
 
 ### Changed
 
 - The manifest and the native plugin packages name `https://github.com/SteveBenner/ordonnateur` as the repository.
+  Why: the repository link in each harness's plugin page has to open for anyone who installs the plugin.
 
 ## [0.2.6] - 2026-10-26
 
