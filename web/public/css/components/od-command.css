@@ -1,0 +1,39 @@
+od-command {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+od-command .od-who {
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+od-command .od-block {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-md);
+  padding-inline: var(--space-2) var(--space-1);
+  background: var(--surface-2);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+od-command .od-lead {
+  display: inline-flex;
+  color: var(--text-dim);
+}
+
+od-command .od-code {
+  padding-block: var(--space-1);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  user-select: all;
+}

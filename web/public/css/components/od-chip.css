@@ -1,0 +1,135 @@
+od-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--badge);
+  max-width: 100%;
+  padding-inline: var(--space-2);
+  border: var(--border-w) solid var(--chip-line, var(--border-strong));
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  vertical-align: middle;
+  --chip-glyph: var(--text-dim);
+}
+
+od-chip[size="table"] {
+  height: var(--control-xs);
+}
+
+od-chip[data-tone="ok"] {
+  --chip-line: var(--ok);
+  --chip-glyph: var(--ok);
+}
+
+od-chip[data-tone="warn"] {
+  --chip-line: var(--warn);
+  --chip-glyph: var(--warn);
+}
+
+od-chip[data-tone="danger"] {
+  --chip-line: var(--danger);
+  --chip-glyph: var(--danger);
+}
+
+od-chip[data-tone="accent"] {
+  --chip-line: var(--accent);
+  --chip-glyph: var(--accent);
+}
+
+od-chip[data-tone="dim"] {
+  --chip-line: var(--border-strong);
+  --chip-glyph: var(--text-dim);
+}
+
+od-chip[data-tone="faint"] {
+  --chip-line: var(--border-strong);
+  --chip-glyph: var(--text-faint);
+  border-style: dashed;
+}
+
+od-chip .od-chip-body {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+od-chip .od-chip-body.od-native {
+  position: relative;
+  cursor: pointer;
+}
+
+od-chip .od-chip-body.od-native::after {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--space-1));
+}
+
+od-chip .od-chip-body .od-icon {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  color: var(--chip-glyph);
+}
+
+od-chip .od-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+od-chip[kind="tag"] {
+  height: auto;
+  min-height: var(--badge);
+  border: 0;
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-weight: var(--weight-regular);
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+od-chip[kind="filter"] {
+  height: var(--control-xs);
+  padding-inline-end: var(--border-w);
+  border-color: var(--control-border);
+  background: transparent;
+}
+
+od-chip .od-remove {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--badge);
+  height: var(--badge);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+od-chip .od-remove::after {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--focus-offset));
+}
+
+od-chip .od-remove:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+od-chip .od-remove .od-icon {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}

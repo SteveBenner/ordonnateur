@@ -1,0 +1,217 @@
+od-source-bar {
+  display: block;
+  min-width: 0;
+}
+
+od-source-bar[data-pending] {
+  min-block-size: var(--control-sm);
+}
+
+od-source-bar[hidden] {
+  display: none;
+}
+
+.od-sourcebar-list {
+  isolation: isolate;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-1);
+}
+
+.od-src-btn,
+.od-src-all,
+.od-src-none,
+.od-src-more {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  inline-size: var(--src-slot);
+  block-size: var(--control-sm);
+  min-block-size: var(--control-sm);
+  padding-inline: var(--space-2);
+  border: var(--border-w) dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-faint);
+  font-family: inherit;
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+.od-src-all,
+.od-src-none,
+.od-src-more {
+  justify-content: center;
+  border-style: solid;
+  border-color: var(--control-border);
+  color: var(--text);
+}
+
+.od-src-all:hover,
+.od-src-none:hover,
+.od-src-more:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+.od-src-all:active,
+.od-src-none:active,
+.od-src-more:active {
+  background: var(--row-selected);
+}
+
+.od-src-btn[aria-pressed="true"] {
+  border: var(--border-w) solid var(--src);
+  background: var(--src-soft);
+  color: var(--text);
+}
+
+.od-src-btn[aria-pressed="true"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  box-shadow: var(--src-glow);
+  pointer-events: none;
+}
+
+.od-src-btn[aria-pressed="true"] .od-src-count {
+  color: var(--text);
+}
+
+.od-src-btn[aria-pressed="true"]:hover {
+  background: var(--src-soft-hover);
+}
+
+.od-src-btn[aria-pressed="true"]:hover .od-src-count {
+  color: var(--text);
+}
+
+.od-src-btn[aria-pressed="true"]:active {
+  background: var(--src-soft-active);
+}
+
+.od-src-btn[aria-pressed="true"]:active .od-src-count {
+  color: var(--text);
+}
+
+.od-src-btn[aria-pressed="false"] .od-src-count {
+  color: var(--text-faint);
+}
+
+.od-src-btn[aria-pressed="false"]:hover {
+  border-style: solid;
+  background: var(--row-hover);
+  color: var(--text-dim);
+}
+
+.od-src-btn[aria-pressed="false"]:active {
+  background: var(--row-selected);
+}
+
+.od-src-btn:focus-visible,
+.od-src-all:focus-visible,
+.od-src-none:focus-visible,
+.od-src-more:focus-visible {
+  outline: var(--focus-w) solid var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+.od-src-btn[hidden],
+.od-src-all[hidden],
+.od-src-none[hidden],
+.od-src-more[hidden] {
+  display: none;
+}
+
+.od-src-label {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: start;
+}
+
+.od-src-count {
+  flex: none;
+  font-size: var(--text-2xs);
+  line-height: var(--lh-2xs);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.od-src-dot {
+  display: inline-block;
+  flex: none;
+  inline-size: var(--src-dot);
+  block-size: var(--src-dot);
+  background: var(--src);
+  border-radius: calc(var(--src-dot) / 2);
+}
+
+.od-src-dot[data-shape="square"] {
+  border-radius: calc(var(--src-dot) / 8);
+}
+
+.od-src-dot[data-shape="diamond"] {
+  border-radius: 0;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+
+.od-src-dot[data-shape="triangle"] {
+  border-radius: 0;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.od-src-dot[data-off] {
+  background: transparent;
+  box-shadow: inset 0 0 0 var(--border-w) var(--src-off);
+}
+
+.od-src-dot[data-shape="diamond"][data-off],
+.od-src-dot[data-shape="triangle"][data-off] {
+  background: var(--src-off);
+  box-shadow: none;
+}
+
+.od-src-btn[aria-pressed="false"] .od-src-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 var(--border-w) var(--src-off);
+}
+
+.od-src-btn[aria-pressed="false"] .od-src-dot[data-shape="diamond"],
+.od-src-btn[aria-pressed="false"] .od-src-dot[data-shape="triangle"] {
+  background: var(--src-off);
+  box-shadow: none;
+}
+
+@media (max-width: 599px) {
+  .od-sourcebar-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .od-src-btn,
+  .od-src-all,
+  .od-src-none,
+  .od-src-more {
+    inline-size: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .od-src-btn,
+  .od-src-all,
+  .od-src-none,
+  .od-src-more {
+    transition: none;
+  }
+}

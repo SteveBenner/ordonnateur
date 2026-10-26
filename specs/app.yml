@@ -1,0 +1,14 @@
+schema_version: 1
+name: ordonnateur
+version: 0.2.6
+kind: plugin
+purpose: >
+  Gives each Claude Code event an ordered card of hooks that ordonnateur runs one after another from a single
+  dispatcher hook, and lists, lints, times and test-fires the hooks of Claude Code, Codex and Hermes. Codex is
+  read-only. Hermes hooks are reordered in place in its config.yaml, through plans, and its allowlist is never written.
+  Blocking guard hooks are never sequenced. `ordonnateur web` shows the same hooks as a layout of events and
+  sources in a browser and changes Claude Code hook order only through plans.
+commands: [list, lint, card, order, move, release, unguard, guard, fire, timings, watch, run, record, web, version]
+contracts:
+  card: specs/card.yml
+  web: specs/web.yml

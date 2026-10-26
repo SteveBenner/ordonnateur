@@ -1,0 +1,57 @@
+od-confirm {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  min-width: 0;
+}
+
+od-confirm .od-intro {
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+od-confirm od-chip[kind="tag"] {
+  max-width: 100%;
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  user-select: text;
+}
+
+od-confirm od-chip[kind="tag"] .od-chip-label {
+  user-select: all;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+od-confirm .od-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+od-confirm od-text-field {
+  width: min(100%, var(--panel-w));
+}
+
+od-confirm .od-row > od-button {
+  margin-top: calc(var(--lh-xs) + var(--space-1));
+}
+
+od-confirm .od-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+od-confirm .od-status[data-match="true"] {
+  color: var(--text);
+}
+
+od-confirm .od-status[data-match="true"] .od-icon {
+  color: var(--ok);
+}

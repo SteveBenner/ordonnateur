@@ -1,0 +1,72 @@
+od-toggle {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+od-toggle .od-native {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-xs);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  text-align: start;
+  cursor: pointer;
+}
+
+od-toggle .od-track {
+  position: relative;
+  flex: none;
+  width: var(--control-sm);
+  height: var(--icon);
+  border-radius: var(--radius-pill);
+  background: var(--control-border);
+}
+
+od-toggle .od-thumb {
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-start: 2px;
+  width: var(--space-3);
+  height: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+od-toggle .od-native[aria-checked="true"] .od-track {
+  background: var(--accent);
+}
+
+od-toggle .od-native[aria-checked="true"] .od-thumb {
+  background: var(--accent-contrast);
+  transform: translateX(var(--space-3));
+}
+
+od-toggle .od-native:not([aria-disabled="true"]):hover .od-track {
+  background: color-mix(in srgb, var(--control-border) 75%, var(--text));
+}
+
+od-toggle .od-native[aria-checked="true"]:not([aria-disabled="true"]):hover .od-track {
+  background: var(--accent-hover);
+}
+
+od-toggle .od-native[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+od-toggle .od-native[aria-disabled="true"] .od-track {
+  opacity: 0.5;
+}
+
+od-toggle .od-native[aria-disabled="true"] .od-text {
+  color: var(--text-dim);
+}
+
+od-toggle .od-text:empty {
+  display: none;
+}

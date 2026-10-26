@@ -1,0 +1,128 @@
+od-combobox {
+  display: block;
+  min-width: 0;
+}
+
+od-combobox .od-chips {
+  display: contents;
+}
+
+od-combobox[multiple] od-text-field .od-box {
+  height: auto;
+  min-height: var(--field-h);
+  padding-block: var(--border-w);
+}
+
+od-combobox[multiple] od-text-field .od-native {
+  flex: 1 1 64px;
+  width: auto;
+  height: calc(var(--field-h) - 4 * var(--border-w));
+}
+
+@media (max-width: 480px) {
+  od-combobox[multiple] od-text-field .od-box {
+    flex-wrap: wrap;
+  }
+}
+
+@media (min-width: 481px) {
+  od-combobox[multiple] od-text-field .od-box {
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+}
+
+od-combobox .od-popup {
+  position: fixed;
+  z-index: var(--z-popover);
+  max-height: 320px;
+  overflow: auto;
+  background: var(--bg-elev);
+  border: var(--border-w) solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+od-combobox .od-popup[hidden] {
+  display: none;
+}
+
+od-combobox .od-row {
+  display: flex;
+  align-items: center;
+  min-height: var(--row);
+  padding-inline: var(--space-2);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+od-combobox .od-option {
+  cursor: pointer;
+}
+
+od-combobox .od-option.od-active {
+  background: var(--row-hover);
+}
+
+od-combobox .od-option[aria-selected="true"] {
+  font-weight: var(--weight-medium);
+}
+
+od-combobox .od-row-note {
+  color: var(--text-dim);
+}
+
+od-combobox .od-combo-caret {
+  flex: none;
+  width: var(--icon);
+  height: var(--icon);
+  color: var(--text-dim);
+  pointer-events: none;
+}
+
+od-combobox od-text-field .od-native {
+  cursor: pointer;
+}
+
+od-combobox .od-fixed {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  background: var(--bg-elev);
+}
+
+od-combobox .od-sep {
+  height: var(--border-w);
+  background: var(--border-strong);
+}
+
+od-combobox .od-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+od-combobox .od-option-icon {
+  flex: none;
+  width: var(--icon);
+  height: var(--icon);
+  margin-inline-end: var(--space-2);
+}
+
+od-combobox .od-option[data-kind="shelf"] {
+  background: var(--accent-soft);
+  box-shadow: inset var(--focus-w) 0 0 var(--accent);
+}
+
+od-combobox .od-option[data-kind="shelf"].od-active {
+  background: linear-gradient(var(--row-hover), var(--row-hover)), var(--accent-soft);
+}
+
+od-combobox .od-option[data-kind="action"] {
+  color: var(--warn);
+}
+
+od-combobox .od-option[data-kind="action"].od-active {
+  background: color-mix(in srgb, var(--warn) 15%, transparent);
+}

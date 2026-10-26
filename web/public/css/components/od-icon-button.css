@@ -1,0 +1,54 @@
+od-icon-button {
+  display: inline-flex;
+  vertical-align: middle;
+  --ib-size: var(--control-sm);
+}
+
+od-icon-button[size="xs"] {
+  --ib-size: var(--control-xs);
+}
+
+od-icon-button[size="md"] {
+  --ib-size: var(--control-md);
+}
+
+od-icon-button .od-native {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ib-size);
+  height: var(--ib-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+od-icon-button[size="xs"] .od-native::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+}
+
+od-icon-button .od-native:not([aria-disabled="true"]):hover {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+od-icon-button .od-native:not([aria-disabled="true"]):active {
+  transform: scale(0.98);
+}
+
+od-icon-button .od-native[aria-pressed="true"] {
+  background: var(--row-selected);
+  color: var(--accent);
+}
+
+od-icon-button .od-native[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}

@@ -1,0 +1,121 @@
+:is(od-text-field, od-textarea) {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  --field-h: var(--control-sm);
+}
+
+:is(od-text-field, od-textarea)[size="md"] {
+  --field-h: var(--control-md);
+}
+
+:is(od-text-field, od-textarea) .od-label {
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  font-weight: var(--weight-medium);
+}
+
+:is(od-text-field, od-textarea) .od-box {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  padding-inline: var(--space-2);
+  background: var(--control-bg);
+  border: var(--border-w) solid var(--control-border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+}
+
+od-text-field .od-box {
+  height: var(--field-h);
+}
+
+:is(od-text-field, od-textarea) .od-box:hover {
+  border-color: var(--text-dim);
+}
+
+:is(od-text-field, od-textarea) .od-box:has(.od-native:focus) {
+  border-color: var(--focus-ring);
+  outline: var(--focus-w) solid var(--focus-ring);
+  outline-offset: 0;
+}
+
+:is(od-text-field, od-textarea):has(.od-native[aria-invalid="true"]) .od-box {
+  border-color: var(--danger);
+}
+
+:is(od-text-field, od-textarea) .od-box > .od-icon {
+  color: var(--text-faint);
+}
+
+:is(od-text-field, od-textarea) .od-native {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+:is(od-text-field, od-textarea) .od-native.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-size: var(--text-sm);
+}
+
+:is(od-text-field, od-textarea) .od-native::placeholder {
+  color: var(--text-faint);
+  opacity: 1;
+}
+
+:is(od-text-field, od-textarea):has(.od-native:disabled) .od-box {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text-faint);
+}
+
+:is(od-text-field, od-textarea) .od-native:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+:is(od-text-field, od-textarea):has(:is(input, textarea).od-native:read-only:not(:disabled)) .od-box {
+  background: transparent;
+  border-color: var(--border);
+}
+
+:is(od-text-field, od-textarea) .od-message {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--lh-xs);
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+:is(od-text-field, od-textarea) .od-message[data-kind="error"] {
+  color: var(--danger);
+}
+
+:is(od-text-field, od-textarea) :is(.od-message, .od-label, od-icon-button)[hidden] {
+  display: none;
+}
+
+@media (max-width: 767px) and (pointer: coarse) {
+  :is(od-text-field, od-textarea, od-combobox, od-confirm) .od-native {
+    font-size: var(--text-lg);
+    line-height: var(--lh-lg);
+  }
+
+  :is(od-text-field, od-textarea, od-combobox, od-confirm) .od-native.mono {
+    font-size: var(--text-lg);
+  }
+}

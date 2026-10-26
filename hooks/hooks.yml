@@ -1,0 +1,3 @@
+schema: rplugin.hooks/v1
+hooks:
+  - { event: session_start, run: ["${PLUGIN_ROOT}/bin/ordonnateur", "watch", "--quiet"], timeout_s: 20, blocking: false, async: true }

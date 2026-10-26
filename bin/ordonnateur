@@ -1,0 +1,14 @@
+#!/usr/bin/env ruby
+# SPDX-License-Identifier: MIT
+
+if ARGV[0] == "run"
+  require_relative "../lib/ordonnateur/runner"
+  exit Ordonnateur::Runner.main(ARGV[1..])
+end
+
+rplugin_home = ENV["RPLUGIN_HOME"]
+rplugin_home = File.expand_path(rplugin_home && !rplugin_home.empty? ? rplugin_home : "~/.rplugin")
+require File.join(rplugin_home, "lib", "rplugin")
+require_relative "../lib/ordonnateur"
+
+exit Plugin.run(ARGV)

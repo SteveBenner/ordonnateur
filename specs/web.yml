@@ -1,0 +1,151 @@
+schema_version: 1
+name: ordonnateur.web
+version: 1
+kind: contract
+purpose: >
+  `ordonnateur web` serves a local web app that shows every Claude Code,
+  Codex and Hermes hook as a layout of events and sources, and changes Claude
+  Code hook order and Hermes hook order only through plans: a draft becomes a plan with its diff, the policy
+  verdict for every file it writes and the lint findings before and after;
+  an apply recomputes the plan and writes only when nothing moved since. The
+  app has no database: it reads the files ordonnateur already reads and writes
+  through the same Takeover and HermesOrder code as the command line. Codex stays read-only.
+  The app ships in the plugin; hosting under a supervisor is the host's
+  business, never the plugin's.
+
+command:
+  usage:
+    - "ordonnateur web [--bind ADDR] [--port N] [--public-origin URL] [--expose] [--open] [--read-only] [--json]"
+    - "ordonnateur web url [--json]"
+  flags:
+    bind: "Overrides web.bind. An address that is not loopback needs --expose."
+    port: "Overrides web.port. 0 asks the system for a free port; the chosen port is printed."
+    public_origin: "Overrides web.public_origin."
+    expose: "Allows a non-loopback bind. Needs a terminal and the typed phrase `expose ordonnateur web`; without --expose such a bind exits 2 expose_required, without a terminal exits 2 not_tty."
+    open: "Hands the link to xdg-open or open when one is on PATH, otherwise prints a note."
+    read_only: "Every write route answers 405 read_only and /config says so."
+    json: "Prints one line {url, bind, port, pid, read_only} instead of the text lines."
+  ready_text:
+    - "ordonnateur web: serving <bind>:<port>; stop with Ctrl-C"
+    - "open this link within 120 seconds, it works once:"
+    - "<origin>/#k=<one-time code>"
+  url_subcommand: "Prints a fresh one-time link for the running server, signed with the launch secret, without contacting the server. Exit 2 not_running when no live server.json exists."
+  single_instance: "One server per state home. <state>/web/server.json holds pid, port, bind, public_origin and started_at; a second start exits 2 already_running; a record whose pid is dead is renamed aside with a UTC stamp."
+  shutdown: "SIGINT and SIGTERM stop the server; the exit removes server.json when it is ours."
+  exit_codes: { 0: stopped cleanly, 2: "usage, refused (disabled, expose_required, not_tty, already_running, port_in_use, bind_failed, not_running)" }
+  dependencies: "Ruby standard library plus the WEBrick copy in vendor/webrick, loaded only by `ordonnateur web`. `ordonnateur run` and `ordonnateur record` never load it."
+  state_dir: "<state> is ${XDG_STATE_HOME:-~/.local/state}/rplugin/ordonnateur. <state>/web is mode 0700."
+
+settings:
+  - { key: web.enabled, type: bool, default: true, kill_switch: ORDONNATEUR_WEB_DISABLED, meaning: "false refuses `ordonnateur web` with exit 2 disabled, and a running server answers every apply 403 disabled (read at each apply)." }
+  - { key: web.bind, type: string, default: 127.0.0.1 }
+  - { key: web.port, type: int, default: 7422, min: 0, max: 65535 }
+  - { key: web.public_origin, type: string, default: "", meaning: "One exact HTTPS origin for a reverse proxy (scheme https, a host, an optional port; no credentials, path, query or fragment, else startup exits 2). Links use it, the Host and Origin checks admit it, cookies carry Secure." }
+  - { key: web.theme, type: enum, options: [system, apple-noir, apple-austere, tronwave, minimal-dark, minimal-light], default: system, meaning: "Theme on a first visit; system follows the browser's light or dark preference. The viewer's own choice, kept in the browser, wins." }
+  - { key: web.projects, type: string, default: "", meaning: "Colon-separated absolute project roots whose local scope is always listed." }
+  - { key: web.discover, type: bool, default: true, meaning: "Lists projects Claude Code knows: only the keys of the projects object in the Claude Code state file are read." }
+
+session:
+  launch_secret: "<state>/web/launch.secret, 32 random bytes as hex, mode 0600, kept across restarts."
+  one_time_code: "nonce.expiry.mac, mac = first 32 hex of HMAC-SHA256(secret, nonce + '.' + expiry); valid 120 seconds, usable once (seen nonces remembered until expiry). It travels in the URL fragment #k=."
+  exchange: "POST /api/v1/session {code} answers 200 {csrf, expires_at} and Set-Cookie od_session=<token>; HttpOnly; SameSite=Strict; Path=/ (plus Secure when a public origin is set). A used, expired or forged code answers 401 unauthorized."
+  limits: "At most 64 sessions, least recently used dropped beyond. A session expires after 12 hours without a request. GET /api/v1/session returns csrf and expires_at; DELETE ends it."
+  csrf: "Every request that is not GET or HEAD carries X-Ordonnateur-CSRF equal to the session's token, else 403 forbidden."
+  origin: "Every such request carries an Origin naming this server (http://127.0.0.1:<port>, http://localhost:<port> or the bind address), else 403. When web.public_origin is set, only that exact origin passes. POST /session accepts a missing Origin and refuses a foreign one."
+  host: "Every request, static files included, carries a Host naming this server and port (or the public origin's host and effective port), else 403. This blocks DNS rebinding."
+  unauthenticated: "Every route except POST /api/v1/session and static files answers 401 without a valid cookie."
+
+http:
+  body_limit: "Request bodies above 1 MiB answer 413. A request with a Transfer-Encoding header (a chunked body) answers 411 before the body is read."
+  request_id: "Every response carries X-Request-Id (16 hex)."
+  error_shape: "{error, message, request_id} plus fields named per error."
+  caching: "API responses are Cache-Control: no-store. Static files carry an ETag and Cache-Control: no-cache."
+  headers: "Content-Security-Policy: default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'. X-Content-Type-Options: nosniff. Referrer-Policy: no-referrer."
+  static_root: "web/public. A path that resolves outside it is never served: WEBrick answers a traversal path such as /../ or %2e%2e with 400, any other missing file with 404."
+  timeouts: "WEBrick RequestTimeout 30 seconds. The policy port keeps its own 20-second limit per judgment."
+  log: "<state>/web/server.log, access and error lines, mode 0600, rotated once to server.log.1 at 4 MiB."
+
+limiter:
+  rule: "Each session may make 30 changes in any 60 seconds; the 31st answers 429 rate_limited with Retry-After in seconds. A change is any request that is not GET or HEAD and passes the read-only, CSRF and Origin checks, accepted or not. POST /api/v1/session is outside the limiter."
+  apply_lock: "One apply runs at a time in the process; a second waits for the first."
+
+routes:
+  "GET /api/v1/config":
+    answers: "{version, theme, read_only, enabled, policy_source: polispec|standalone, folder_picker: {source: standalone|rui-hub, component: null|{module, script, selectable}}, discover, events: {claude-code: [lifecycle order], codex: [lifecycle order], hermes: [Model::HERMES_EVENTS order]}, hermes: {tool_events: [events], blocking_events: [events]}, sequenceable: [events], not_sequenceable: {event: reason}, guard_events: [events], effects_text}"
+    not_sequenceable: "Every Claude Code event outside the sequenceable list, with Model.refused_reason."
+    lifecycle_order:
+      claude-code: [Setup, SessionStart, InstructionsLoaded, UserPromptSubmit, UserPromptExpansion, PreToolUse, PermissionRequest, PermissionDenied, PostToolUse, PostToolUseFailure, PostToolBatch, SubagentStart, SubagentStop, TaskCreated, TaskCompleted, TeammateIdle, Notification, MessageDisplay, Elicitation, ElicitationResult, PreCompact, PostCompact, PreModelSwitch, PostModelSwitch, ConfigChange, CwdChanged, DirectoryAdded, FileChanged, WorktreeCreate, WorktreeRemove, Stop, StopFailure, SessionEnd]
+      codex: [SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, SubagentStart, SubagentStop, PreCompact, PostCompact, Interrupt, Stop, SessionEnd]
+    effects_text: "Running Claude Code sessions pick up the change through their settings file watcher; new sessions read it at start."
+  "GET /api/v1/projects":
+    answers: "{projects: [{root, name, sources: [discovered|setting|pinned], local_hooks: int, local_card: bool}], notes: [string]}"
+    discovery: "When web.discover is true: read ${CLAUDE_CONFIG_DIR}/.claude.json when CLAUDE_CONFIG_DIR is set, else ~/.claude.json; skip it with a note when it is missing, unreadable, not JSON or above 64 MiB; keep the keys of its projects object that are existing directories with a <root>/.claude/settings.local.json holding a hooks object, or with a local card; at most 500."
+    union: "Discovered, web.projects and the pinned list, deduplicated by realpath, sorted by name then root. A setting or pinned root that is not a directory is listed with a note, never dropped silently."
+  "GET /api/v1/folders":
+    query: "path=<absolute directory> optional, the user's home when absent; hidden=1 lists dot folders too"
+    answers: "{path, parent: null|absolute path, entries: [{name, path}], total, truncated}. path is the realpath, entries are folders only sorted case-insensitively, at most 1000."
+    errors: "422 refused for a relative path, a missing or non-directory path or one the server cannot read. Answered by the folder_picker port: a plugin-local extension first (extensions/rui-hub, which only ever declines list), then lib/ordonnateur/folder_picker/standalone.rb."
+    read_only: "A read: allowed on a --read-only server."
+  "PUT /api/v1/state/projects":
+    body: "{pinned: [absolute directory paths]}, at most 200"
+    effect: "Writes <state>/web/projects.json (mode 0600, atomic). ordonnateur's own state, so no plan. 422 invalid for a relative path, a non-directory or too many entries."
+  "GET /api/v1/fingerprint":
+    query: "project=<root> optional"
+    answers: "{config, timings}: config is the watch fingerprint of every hook source and card for that project; timings is a sha256 over the timing rows."
+  "GET /api/v1/layout":
+    query: "project=<root> optional; without it only user, managed, plugin and Codex sources are read, by loading the inventory with <state>/web/empty-root (an empty directory) as the project root, never the server's working directory"
+    answers: >
+      {fingerprint: {config, timings}, project, settings_files: {user: path, local: path|null, codex: path, hermes: path},
+      hooks: [hook], cards: {user: {path, card}|null,
+      local: {path, card}|null}, findings: [finding], notes: [string]}
+    hook: "Every field of `ordonnateur list --json` for the hook (Inventory.load_full), plus effective_timeout (Hook#effective_timeout: the hook's timeout, else the event default in seconds), guard (bool, Inventory.guard? with the scope's unguarded list), hard_guard (bool), findings: [finding id], timing: {runs, p50, p95, max, failures, slow, near_timeout}|null. A card member's position is in its status, member#<N>, 1-based; list --json carries no separate position field. A hook's `reason` is a predicate that follows the hook's name (\"is a guard on PreToolUse; ...\", \"is on PermissionRequest, which cannot be sequenced: ...\"); a client shows it as `<program> <reason>`."
+    hermes_hook: "A hook with harness hermes has scope user, plugin null, group_index the entry's index in the event list, handler_index 0 and status allowlisted|auto-accepted|not-allowlisted; trust is {state, approved_at, script_mtime_at_approval, opt_in}. guard and hard_guard are both true exactly when the hook is pinned (fail_closed on a blocking event, or protected by the policy engine), else false. settings_files.hermes is $HERMES_HOME/config.yaml."
+    finding: "Every field of `ordonnateur lint --json` for the finding, plus id: first 12 hex of sha256 over code, hook id and message."
+    etag: "ETag is the sha256 of config + timings; If-None-Match answers 304."
+  "POST /api/v1/plans":
+    body: "{scope: user|local, project: <root>|null, base: <config fingerprint>, changes: [change]}"
+    change_kinds:
+      order: "{op: order, event, hooks: [hook ids in run order], stop_on_block?: bool}. The final member list of a carded or newly carded event; a reorder is an order with the same ids."
+      release: "{op: release, event}"
+      guard: "{op: guard, hook}"
+      unguard: "{op: unguard, hook}"
+    hermes_changes: "A Hermes plan holds only order changes: {op: order, event, hooks: [Hermes hook ids in the new order of the named unpinned hooks]}, every id on that one event and one harness, event one of Model::HERMES_EVENTS, no stop_on_block. scope must be user (else 422 invalid). A draft mixing Hermes and Claude Code changes, or an order mixing their hooks, answers 422 invalid. release, guard and unguard naming a Hermes hook (or release naming a Hermes event) answer 422 refused with refusals [`<id>: Hermes has no cards`]. A pinned hook, a hook of another event, a duplicate, fewer than two hooks, an unsupported config.yaml layout or a Python-only event answer 422 refused through HermesOrder. Several order changes of different events are planned in turn, each over the text the previous one produced, into one plan with one write of config.yaml."
+    validation: "local scope needs project. At most one order or release per event. A guard or unguard naming a hook on an event that also has an order or release in the same draft answers 422 conflict_in_draft. A Codex hook id answers 422 refused (Codex is read-only). An unknown op, event or hook answers 422 invalid."
+    base: "When base is not the current config fingerprint for the project, 409 base_moved with the current fingerprint; nothing is planned."
+    build: "One Takeover for the scope, cwd = project root (local) or HOME (user). Apply guard and unguard first, then each order (plan_order) and release (plan_release), in the order given. A Takeover Refused answers 422 refused with the refusal lines; SettingsChanged answers 409 base_moved."
+    answers: >
+      201 {plan_id, scope, project, classification, needs_confirm, applicable, blocked_reason,
+      files: [{path, sha_before, diff, changes: bool}], verdicts: [{path, verdict, rule_id, reason}],
+      card_before, card_after, lint: {before: [finding], after: [finding], added: [finding id], resolved: [finding id]},
+      effects_text, notes, created_at, orders: [{event, before: [hook id], after: [hook id]}]}
+    orders: "One entry per event whose order the plan changes, with the Hermes hook ids of the whole event list before and after; an empty list for a Claude Code plan."
+    hermes_plan: "A Hermes plan lists one file (config.yaml) in files, has card_before and card_after null, classification reorder (needs_confirm false), effects_text the restart note `Hermes applies this order to new processes; a running gateway keeps its current order until restart.` and the HermesOrder notes. Its plan_id hashes the same fields with a null card_path and card_text_after. Apply rebuilds through HermesOrder#apply: policy verdict check, backup of config.yaml, sha recheck, atomic write, one ordonnateur.card.applied event with harness hermes. The Hermes allowlist is never written."
+    plan_id: "pl_ + first 16 hex of sha256 over the canonical JSON of {scope, settings_path, settings_sha, settings_text_after, card_path, sha256(card_text_before), card_text_after, verdicts}."
+    classification: "A Hermes plan is always reorder. For Claude Code, reorder when a card existed before, every event in before or after has the same member id set and the same stop_on_block on both sides, unguarded is equal, and the settings text is unchanged; change otherwise. needs_confirm is true for change."
+    applicable: "false when nothing changes (blocked_reason nothing_to_apply) or any verdict is warn (policy_warn) or deny (policy_deny)."
+    lint_after: "Lint runs over the inventory loaded with the plan's settings and card texts laid over the files they replace (Overlay), so the after set is what `ordonnateur lint` would print once applied; timing rows are the current ones."
+    retention: "Plans live in server memory, at most 200 and 1 hour each; the oldest go first."
+  "GET /api/v1/plans/{id}": { answers: "the plan, or 404 not_found" }
+  "POST /api/v1/plans/{id}/apply":
+    body: "{confirm?: <plan id>}"
+    steps:
+      - "404 not_found for an unknown or expired plan; 409 already_applied for an applied one."
+      - "403 disabled when web.enabled resolves false; 405 read_only under --read-only."
+      - "Rebuild the plan from its stored request. A different plan_id answers 409 plan_changed with the new plan id."
+      - "needs_confirm without confirm equal to the plan id answers 422 confirm_required with the plan id."
+      - "applicable false answers 422 with its blocked_reason; a warn or deny is never applied from the web."
+      - "Takeover#apply: backup, settings sha recheck (SettingsChanged answers 409 plan_changed), atomic writes keeping each file's mode, ordonnateur.card.applied events with via web."
+    answers: "200 {plan_id, applied: true, files: [written paths], backups: [backup paths], fingerprint: {config, timings}}"
+  static: "GET / serves web/public/index.html; other paths serve web/public files."
+
+browser:
+  project_selector: "The project combobox lists Global Shelf (no project, the default and the input text when none is chosen or registered) pinned first with an accent rail and tint, Select a Folder... in the warn colour under it, a separator, then the projects. Typing filters only the projects. Select a Folder... opens the in-app folder picker (selectable=folder, the rui-hub composite.form.file-picker props), which reads GET /api/v1/folders; confirming pins the folder through PUT /api/v1/state/projects, selects it and loads its hooks. The folder_picker port is declared in the manifest; its local rui-hub extension reports source rui-hub only when rui-hub serves the built component script, which today it does not, so source is standalone."
+  sources: "A provider is one source row of one harness (claude-code:user, codex:user, hermes:user, claude-code:plugin:<id>, and so on). The toolbar shows one colored toggle per provider when two or more are visible; each provider keeps a fixed color per theme. Switching one off hides its hooks in the matrix and the list; drafts, plans and order numbers keep reading the full layout. The off set is kept in the browser under the pref `sources`; everything is on by default and a provider seen for the first time appears on. Show all is offered while any provider is off and Hide all while any provider is on; Hide all switches every provider off and announces it. Hovering or focusing a toggle highlights that provider's cards and row header in the matrix and its rows in the list (data-hot). A provider that is off hides every one of its rows in the list too, card members and natives of an edited scope included. A matrix row name is never truncated: it wraps, breaking first after @ and ·; the path under it may clip. Matrix columns size to their widest hook card, with a minimum of --col-w (--col-w-compact in compact density), and a card never truncates or wraps its text."
+  sort: "Every list column but Actions is a sort button. A sort reorders rows inside each event group and never moves the groups or changes the matrix. The default is # ascending, execution order; # restores it from any other sort. Clicking the active column flips its direction; another column starts ascending for #, Hook, Source and Status and descending for Findings (severity, then count), p95 and Timeout. Missing values sort last in both directions and ties keep execution order. Order badges always show execution positions. The active th carries aria-sort, the change is announced, and the choice is kept in the browser under the pref `sort` as {key, dir}."
+  page_parameter: "`?off=<provider>,<provider>` or `?off=*` starts the page with those providers off; `?sort=<key>:<asc|desc>` starts the list with that sort; `?view=list|map` starts in that view. Each is for a shareable view and never writes a stored pref."
+
+events:
+  - { name: ordonnateur.web, fields: "event start|stop, bind, port, read_only", when: "server start and stop" }
+  - { name: ordonnateur.card.applied, fields: "existing fields plus via: cli|web", when: "every applied event change" }
+
+agents: "The web app is for the person at the browser. An agent never drives its API; when it wants the person to change hook order it gives them the `ordonnateur order` plan or points them to `ordonnateur web`. Every write the app makes is still judged by the policy port first."

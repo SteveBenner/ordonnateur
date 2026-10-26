@@ -1,0 +1,100 @@
+od-folder-picker {
+  display: contents;
+}
+
+od-folder-picker .od-body {
+  display: grid;
+  gap: var(--space-3);
+  min-height: 0;
+}
+
+od-folder-picker .od-fp-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+od-folder-picker .od-fp-path {
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  overflow-wrap: anywhere;
+}
+
+od-folder-picker .od-fp-list {
+  max-height: min(320px, 50dvh);
+  overflow: auto;
+  border: var(--border-w) solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+od-folder-picker .od-fp-list:focus-visible {
+  outline: var(--focus-w) solid var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+od-folder-picker .od-fp-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--row);
+  padding-inline: var(--space-2);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  cursor: pointer;
+}
+
+od-folder-picker .od-fp-row:hover {
+  background: var(--row-hover);
+}
+
+od-folder-picker .od-fp-row[aria-selected="true"] {
+  background: var(--row-selected);
+  box-shadow: inset var(--focus-w) 0 0 var(--accent);
+}
+
+od-folder-picker .od-fp-row .od-icon {
+  flex: none;
+  width: var(--icon);
+  height: var(--icon);
+  color: var(--warn);
+}
+
+od-folder-picker .od-fp-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+od-folder-picker .od-fp-empty,
+od-folder-picker .od-fp-note {
+  display: flex;
+  align-items: center;
+  min-height: var(--row);
+  padding-inline: var(--space-2);
+  color: var(--text-dim);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+od-folder-picker .od-fp-note {
+  min-height: 0;
+  padding-inline: 0;
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+od-folder-picker .od-fp-skeleton {
+  display: flex;
+  align-items: center;
+  min-height: var(--row);
+  padding-inline: var(--space-2);
+}
+
+od-folder-picker .od-fp-skeleton od-skeleton {
+  width: 40%;
+}

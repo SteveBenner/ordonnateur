@@ -1,0 +1,22 @@
+schema: rplugin.extension/v1
+id: rui-hub
+kind: fleet
+catalogue_version: "2.9.0"
+description: Backs ordonnateur's declared folder_picker port with rui-hub's composite.form.file-picker component once rui-hub serves it.
+provides: [folder_picker]
+confidence: unverified
+detect:
+  - command: rui-hub
+  - path: ~/.rplugins/rui-hub
+requires: []
+adapters:
+  folder_picker: lib/folder_picker.rb
+notes: >
+  Plugin-local extension. describe asks the local rui-hub for the built vanilla
+  file-picker.js of composite.form.file-picker and answers only when it is
+  served; today rui-hub holds that module as a reservation with no accepted
+  solution, so describe raises NotHandled and the standalone picker answers.
+  list is never handled here: the component only draws a listing, ordonnateur
+  supplies it. One attempt per 30 seconds, 2 second timeouts, loopback hosts
+  only, killed by ORDONNATEUR_RUIHUB_DISABLED=1. It installs nothing, so
+  plan.sh emits no links.

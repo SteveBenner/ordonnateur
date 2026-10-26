@@ -1,0 +1,19 @@
+schema: rplugin.extension/v1
+id: polispec
+kind: fleet
+catalogue_version: "2.9.0"
+description: Backs ordonnateur's declared policy port with polispec's own judgment of writes and test-fires.
+provides: [policy]
+confidence: verified
+detect:
+  - command: polispec
+  - path: ~/.rplugins/polispec
+requires: []
+adapters:
+  policy: lib/policy.rb
+notes: >
+  Plugin-local extension. judge runs polispec explain --harness claude --json
+  with a synthetic PreToolUse payload on stdin and fails closed when polispec
+  does not answer. protected? names the hooks polispec installs itself by
+  their /bin/polispec-guard command, the polispec and polispec-guard programs,
+  and polispec plugin hooks. It installs nothing, so plan.sh emits no links.

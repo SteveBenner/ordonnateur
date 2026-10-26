@@ -1,0 +1,341 @@
+od-app-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  grid-template-areas: "topbar" "toolbar" "banners" "main" "tray";
+  height: 100dvh;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.od-topbar {
+  grid-area: topbar;
+}
+
+.od-toolbar {
+  grid-area: toolbar;
+}
+
+.od-banners {
+  grid-area: banners;
+}
+
+od-app-shell > .od-main {
+  grid-area: main;
+}
+
+.od-tray-host {
+  grid-area: tray;
+}
+
+.od-topbar,
+.od-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-inline: var(--space-3);
+}
+
+.od-topbar {
+  min-height: var(--topbar-h);
+  border-bottom: var(--border-w) solid var(--border);
+  background: var(--surface);
+}
+
+.od-toolbar {
+  min-height: var(--toolbar-h);
+  border-bottom: var(--border-w) solid var(--border);
+  background: var(--bg);
+}
+
+.od-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "start end" "sources sources";
+  align-items: center;
+  gap: var(--space-2) var(--space-2);
+  padding-inline: var(--space-3);
+}
+
+.od-toolbar > .od-group-start {
+  grid-area: start;
+}
+
+.od-toolbar > .od-group-end {
+  grid-area: end;
+  justify-self: end;
+}
+
+.od-toolbar > od-source-bar {
+  grid-area: sources;
+}
+
+.od-toolbar:not(:has(od-source-bar:not([hidden]))) {
+  grid-template-areas: "start end";
+}
+
+.od-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.od-wordmark {
+  font-size: var(--text-md);
+  line-height: var(--lh-md);
+  font-weight: var(--weight-strong);
+}
+
+.od-version {
+  font-size: var(--text-2xs);
+  line-height: var(--lh-2xs);
+}
+
+.od-version .od-native {
+  font-size: var(--text-2xs);
+  line-height: var(--lh-2xs);
+}
+
+.od-toolbar .od-title {
+  font-size: var(--text-lg);
+  line-height: var(--lh-lg);
+  font-weight: var(--weight-strong);
+}
+
+.od-topbar od-combobox {
+  width: 100%;
+}
+
+.od-toolbar od-toggle {
+  min-height: var(--control-sm);
+}
+
+.od-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-sm);
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  white-space: nowrap;
+}
+
+.od-sync-dot {
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--ok);
+}
+
+.od-sync[data-state="changed"] .od-sync-dot {
+  background: var(--warn);
+}
+
+.od-sync[data-state="offline"] .od-sync-dot {
+  background: var(--danger);
+}
+
+.od-banners:empty {
+  display: none;
+}
+
+.od-banners od-banner {
+  border-bottom: var(--border-w) solid var(--border);
+}
+
+.od-banner-notes:not(.od-notes-open) .od-message {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+od-app-shell > .od-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+  min-width: 0;
+}
+
+od-app-shell .od-view {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.od-inspector-host {
+  min-width: 0;
+  border-inline-start: var(--border-w) solid var(--border);
+  background: var(--bg-elev);
+}
+
+.od-tray-host {
+  position: relative;
+  z-index: var(--z-tray);
+  min-height: var(--tray-h);
+  border-top: var(--border-w) solid var(--border);
+  background: var(--bg-elev);
+}
+
+.od-skeleton-grid {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.od-skeleton-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.od-skeleton-row od-skeleton {
+  height: var(--row);
+}
+
+#gate {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: var(--space-4);
+}
+
+od-session-gate .od-panel {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: center;
+  width: min(100%, var(--panel-w));
+  text-align: center;
+}
+
+od-session-gate .od-lead {
+  color: var(--text-faint);
+}
+
+od-session-gate .od-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.od-shortcuts {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.od-shortcut-section {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.od-shortcut-title {
+  color: var(--text-dim);
+  font-size: var(--text-2xs);
+  line-height: var(--lh-2xs);
+  font-weight: var(--weight-strong);
+  text-transform: var(--label-case);
+  letter-spacing: var(--label-track);
+}
+
+.od-shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: var(--row-compact);
+}
+
+.od-shortcut-keys {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .od-topbar od-combobox {
+    width: var(--picker-w-narrow);
+  }
+}
+
+@media (min-width: 1024px) {
+  .od-topbar od-combobox {
+    width: var(--picker-w);
+  }
+
+  od-app-shell > .od-main[data-inspector="open"] {
+    grid-template-columns: minmax(0, 1fr) var(--panel-w);
+  }
+}
+
+@media (max-width: 767px) {
+  .od-topbar,
+  .od-toolbar {
+    padding-block: var(--space-1);
+  }
+
+  .od-topbar {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "mark version . sync theme"
+      "harness harness harness harness harness"
+      "project project project project project";
+    gap: var(--space-1) var(--space-2);
+  }
+
+  .od-topbar .od-group {
+    display: contents;
+  }
+
+  .od-topbar .od-wordmark {
+    grid-area: mark;
+  }
+
+  .od-topbar .od-version {
+    grid-area: version;
+  }
+
+  .od-topbar od-segmented {
+    grid-area: harness;
+    display: grid;
+  }
+
+  .od-topbar od-combobox {
+    grid-area: project;
+  }
+
+  .od-topbar .od-sync {
+    grid-area: sync;
+  }
+
+  .od-topbar od-theme-switcher {
+    grid-area: theme;
+  }
+
+  .od-toolbar .od-group-end {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 599px) {
+  .od-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "start" "end" "sources";
+  }
+
+  .od-toolbar:not(:has(od-source-bar:not([hidden]))) {
+    grid-template-areas: "start" "end";
+  }
+
+  .od-toolbar .od-group-end {
+    justify-self: start;
+  }
+
+  .od-topbar od-segmented .od-native {
+    padding-inline: var(--space-2);
+  }
+}

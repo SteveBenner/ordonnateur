@@ -1,0 +1,12 @@
+{
+  "name": "ordonnateur",
+  "version": "0.2.6",
+  "description": "Puts each harness event's hooks in the order you choose, and lists, lints, times and test-fires every hook.",
+  "repository": "https://github.com/SteveBenner/ordonnateur",
+  "skills": "./skills/",
+  "hooks": "./hooks/codex.json",
+  "interface": {
+    "displayName": "ordonnateur",
+    "shortDescription": "Puts each harness event's hooks in the order you choose, and lists, lints, times and test-fires every hook."
+  }
+}

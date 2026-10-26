@@ -1,0 +1,10 @@
+schema: ordonnateur.vendor/v1
+source: rubygems.org
+gems:
+  - name: webrick
+    version: 1.9.2
+    license: Ruby AND BSD-2-Clause
+    license_file: LICENSE.txt
+    sha256: beb4a15fc474defed24a3bda4ffd88a490d517c9e4e6118c3edce59e45864131
+    files: [lib/, LICENSE.txt]
+    used_by: ordonnateur web

@@ -1,0 +1,45 @@
+od-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--control-md);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+  background: var(--surface-2);
+  box-shadow: inset var(--focus-w) 0 0 var(--banner-edge, var(--accent));
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+od-banner[data-severity="ok"] {
+  --banner-edge: var(--ok);
+}
+
+od-banner[data-severity="warn"] {
+  --banner-edge: var(--warn);
+}
+
+od-banner[data-severity="danger"] {
+  --banner-edge: var(--danger);
+}
+
+od-banner .od-lead {
+  display: inline-flex;
+  flex: none;
+  color: var(--banner-edge, var(--accent));
+}
+
+od-banner .od-message {
+  flex: 1 1 var(--col-w);
+  min-width: 0;
+}
+
+od-banner .od-message + od-button {
+  margin-inline-start: auto;
+}
+
+od-banner od-button[hidden] {
+  display: none;
+}

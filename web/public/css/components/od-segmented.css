@@ -1,0 +1,57 @@
+od-segmented {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  height: var(--control-sm);
+  border: var(--border-w) solid var(--control-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  vertical-align: middle;
+}
+
+od-segmented[size="md"] {
+  height: var(--control-md);
+}
+
+od-segmented[size="xs"] {
+  height: var(--control-xs);
+}
+
+od-segmented .od-native {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding-inline: var(--space-3);
+  border: 0;
+  border-radius: calc(var(--radius-sm) - var(--border-w));
+  background: transparent;
+  color: var(--text-dim);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+od-segmented .od-native:hover {
+  background: var(--row-hover);
+}
+
+od-segmented .od-native[aria-checked="true"] {
+  background: var(--row-selected);
+  color: var(--text);
+  font-weight: var(--weight-medium);
+  box-shadow: inset 0 calc(-1 * var(--indicator-w)) 0 var(--accent);
+}
+
+od-segmented .od-native:focus-visible {
+  outline-offset: calc(var(--focus-w) * -1);
+}
+
+od-segmented[aria-disabled="true"] {
+  opacity: 0.5;
+}
+
+od-segmented[aria-disabled="true"] .od-native {
+  cursor: not-allowed;
+}

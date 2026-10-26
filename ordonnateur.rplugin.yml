@@ -1,0 +1,54 @@
+schema: rplugin/v1
+id: ordonnateur
+name: ordonnateur
+version: 0.2.6
+rplugin: ">= 1.19.0"
+native: true
+description: Puts each harness event's hooks in the order you choose, and lists, lints, times and test-fires every hook.
+ports:
+  required: [state, policy]
+  optional: [events, notify, folder_picker]
+  declared:
+    - name: policy
+      summary: Judges ordonnateur's own writes and test-fires against the host's policy engine and names the hooks it must never absorb.
+      standalone: { file: lib/ordonnateur/policy/standalone.rb, class: Ordonnateur::Policy::Standalone }
+    - name: folder_picker
+      summary: Lists the folders of a directory for the web app's Select a Folder picker and says which picker component a host serves.
+      standalone: { file: lib/ordonnateur/folder_picker/standalone.rb, class: Ordonnateur::FolderPicker::Standalone }
+extensions:
+  enabled: [rstack, claude-code, codex, hermes, os]
+  only: [claude-code, codex, hermes]
+interface:
+  display_name: ordonnateur
+  category: Developer Tools
+corpora: null
+settings:
+  - { key: run.record, type: bool, default: true, scopes: [machine], kill_switch: ORDONNATEUR_RECORD_DISABLED, description: "Records each sequenced run and test-fire for ordonnateur timings." }
+  - { key: watch.enabled, type: bool, default: true, scopes: [machine], kill_switch: ORDONNATEUR_WATCH_DISABLED, description: "Checks hook configuration for new findings at each session start and notifies." }
+  - { key: alerts.failures, type: int, default: 3, min: 0, scopes: [machine], description: "Consecutive failed runs of a sequenced hook before a notification; 0 turns alerts off." }
+  - { key: events.runs, type: bool, default: true, scopes: [machine], description: "Emits one event per sequenced run, fire and lint to the events port (rLogs on rStack hosts)." }
+  - { key: lint.slow_ms, type: int, default: 2000, min: 100, scopes: [machine], description: "p95 milliseconds above which lint reports a hook as slow." }
+  - { key: web.enabled, type: bool, default: true, scopes: [machine], kill_switch: ORDONNATEUR_WEB_DISABLED, description: "Allows ordonnateur web to start and its running server to apply plans." }
+  - { key: web.bind, type: string, default: "127.0.0.1", scopes: [machine], description: "Address ordonnateur web listens on; an address that is not loopback also needs --expose." }
+  - { key: web.port, type: int, default: 7422, min: 0, max: 65535, scopes: [machine], description: "Port ordonnateur web listens on; 0 asks the system for a free one." }
+  - { key: web.public_origin, type: string, default: "", scopes: [machine], description: "One exact HTTPS origin for a reverse proxy in front of ordonnateur web, empty for the local HTTP link." }
+  - { key: web.theme, type: enum, options: [system, apple-noir, apple-austere, tronwave, minimal-dark, minimal-light], default: system, scopes: [machine], description: "Theme ordonnateur web shows on a first visit; the viewer's own choice in the browser wins." }
+  - { key: web.projects, type: string, default: "", scopes: [machine], description: "Colon-separated absolute project roots whose local scope ordonnateur web always lists." }
+  - { key: web.discover, type: bool, default: true, scopes: [machine], description: "Lists the projects Claude Code knows by reading only the keys of the projects object in its state file." }
+contents:
+  skills:
+    - { id: ordonnateur, path: skills/ordonnateur/SKILL.md }
+  agents: []
+  specs:
+    - { path: specs/app.yml }
+    - { path: specs/card.yml }
+    - { path: specs/web.yml }
+  scripts: []
+  hooks: hooks/hooks.yml
+  docs: []
+compatibility:
+  ruby: ">= 3.3"
+  harnesses: { claude-code: supported, codex: supported, cowork: unsupported, hermes: supported, antigravity: unsupported, pi: unsupported, deepseek-tui: unsupported }
+repository:
+  remote: https://github.com/SteveBenner/ordonnateur.git
+  store_path: ordonnateur

@@ -1,0 +1,24 @@
+od-digest {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+od-digest .od-native {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-xs);
+  padding: 0 var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  cursor: copy;
+}
+
+od-digest .od-native:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}

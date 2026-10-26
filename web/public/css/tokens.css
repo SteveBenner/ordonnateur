@@ -1,0 +1,81 @@
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --maxw: 1320px;
+  --dur-fast: 110ms;
+  --dur: 190ms;
+  --dur-slow: 340ms;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  --text-2xs: 11px;
+  --lh-2xs: 14px;
+  --text-xs: 12px;
+  --lh-xs: 16px;
+  --text-sm: 13px;
+  --lh-sm: 18px;
+  --text-md: 14px;
+  --lh-md: 22px;
+  --text-lg: 16px;
+  --lh-lg: 22px;
+  --text-xl: 18px;
+  --lh-xl: 24px;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-strong: 600;
+
+  --control-xs: 24px;
+  --control-sm: 28px;
+  --control-md: 32px;
+
+  --row: 28px;
+  --row-compact: 24px;
+
+  --icon: 16px;
+  --icon-sm: 14px;
+  --icon-lg: 18px;
+
+  --border-w: 1px;
+  --focus-w: 2px;
+  --indicator-w: 2px;
+  --focus-offset: 2px;
+
+  --topbar-h: 40px;
+  --toolbar-h: 40px;
+  --tray-h: 40px;
+  --panel-w: 360px;
+  --picker-w: 280px;
+  --picker-w-narrow: 200px;
+  --dialog-sm: 440px;
+  --dialog-md: 640px;
+  --dialog-lg: 960px;
+
+  --col-w: 232px;
+  --col-w-compact: 200px;
+  --rowhead-w: 184px;
+  --cell-pad: var(--space-2);
+  --card-gap: var(--space-1);
+  --card-min-h: 52px;
+  --card-h-compact: var(--row);
+  --badge: 20px;
+  --rail-w: 2px;
+  --rowhead-w-narrow: 136px;
+  --list-col-text: 160px;
+  --list-col-num: 88px;
+  --list-col-num-wide: 104px;
+  --edge-fade: var(--space-5);
+
+  --z-sticky: 10;
+  --z-tray: 20;
+  --z-drawer: 30;
+  --z-popover: 40;
+  --z-toast: 60;
+}

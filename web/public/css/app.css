@@ -1,0 +1,43 @@
+@layer reset, tokens, themes, base, components, shell, list, matrix, panels;
+
+@import url("reset.css") layer(reset);
+@import url("tokens.css") layer(tokens);
+@import url("themes.css") layer(themes);
+@import url("base.css") layer(base);
+
+@import url("components/od-button.css") layer(components);
+@import url("components/od-icon-button.css") layer(components);
+@import url("components/od-text-field.css") layer(components);
+@import url("components/od-combobox.css") layer(components);
+@import url("components/od-toggle.css") layer(components);
+@import url("components/od-segmented.css") layer(components);
+@import url("components/od-tabs.css") layer(components);
+@import url("components/od-dialog.css") layer(components);
+@import url("components/od-drawer.css") layer(components);
+@import url("components/od-tooltip.css") layer(components);
+@import url("components/od-chip.css") layer(components);
+@import url("components/od-digest.css") layer(components);
+@import url("components/od-command.css") layer(components);
+@import url("components/od-confirm.css") layer(components);
+@import url("components/od-state.css") layer(components);
+@import url("components/od-skeleton.css") layer(components);
+@import url("components/od-kbd.css") layer(components);
+@import url("components/od-banner.css") layer(components);
+@import url("components/od-toaster.css") layer(components);
+@import url("components/od-theme-switcher.css") layer(components);
+@import url("components/od-source-bar.css") layer(components);
+@import url("components/od-folder-picker.css") layer(components);
+
+@import url("shell.css") layer(shell);
+@import url("list.css") layer(list);
+@import url("views/matrix.css") layer(matrix);
+@import url("views/panels.css") layer(panels);
+
+@media (prefers-reduced-motion: reduce) {
+  :where(html) :where(*, *::before, *::after) {
+    transition-property: opacity;
+    transition-duration: var(--dur-fast);
+    animation: none;
+    scroll-behavior: auto;
+  }
+}

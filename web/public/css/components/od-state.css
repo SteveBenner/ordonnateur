@@ -1,0 +1,46 @@
+od-state {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  min-width: 0;
+}
+
+od-state .od-lead {
+  display: inline-flex;
+  flex: none;
+  align-self: stretch;
+  padding-top: calc((var(--lh-sm) - var(--icon)) / 2);
+  color: var(--text-faint);
+}
+
+od-state[data-kind="error"] .od-lead {
+  color: var(--danger);
+}
+
+od-state .od-main {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+  min-width: 0;
+}
+
+od-state .od-title {
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--weight-medium);
+}
+
+od-state .od-body {
+  max-width: 72ch;
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+od-state .od-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
+}
