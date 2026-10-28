@@ -1,6 +1,6 @@
 schema_version: 1
 name: ordonnateur
-version: 0.2.9
+version: 0.2.10
 kind: plugin
 purpose: >
   Gives each Claude Code event an ordered card of hooks that ordonnateur runs one after another from a single
@@ -18,4 +18,6 @@ contracts:
 release: >
   main is development, test checks a tagged release in its own checkout, and stable is production: only the operator
   promotes to stable, and its deploy pins the tag on the host and publishes the tag's export-ignore-filtered tree to
-  the GitHub remote named in the manifest as one commit and tag.
+  the GitHub remote named in the manifest as one commit and tag. The release script never depends on the caller's
+  PATH for the installed command or agy, because the operator launcher runs deploy steps with PATH=/usr/bin:/bin: it
+  reads the installed command at rplugin's install link and finds agy on PATH, then in ~/.local/bin.

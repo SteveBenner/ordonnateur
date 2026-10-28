@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.10] - 2026-10-28
+
+### Fixed
+
+- The release health check and the Antigravity refresh no longer depend on the caller's PATH:
+  `scripts/release.rb installed` runs the installed command at rplugin's install link
+  (`$RPLUGINS_HOME/ordonnateur/bin/ordonnateur`, `~/.rplugins` by default), and `release.rb antigravity` finds `agy`
+  on PATH, then in `~/.local/bin`, or at `ORDONNATEUR_AGY`, and runs it with `HOME` set. Why: polispec's operator
+  launcher runs deploy steps with `PATH=/usr/bin:/bin`, so the v0.2.9 stable deploy skipped the Antigravity refresh and
+  failed its health check after it had pinned and published v0.2.9.
+
 ## [0.2.9] - 2026-10-27
 
 ### Fixed
