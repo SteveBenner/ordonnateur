@@ -1,8 +1,8 @@
 import { providerKey } from "./sources.js";
 
-export const HARNESS_LABELS = { "claude-code": "Claude Code", codex: "Codex", hermes: "Hermes" };
+export const HARNESS_LABELS = { "claude-code": "Claude Code", codex: "Codex", hermes: "Hermes", antigravity: "Antigravity" };
 
-const SOURCE_RANK = { managed: 0, user: 1, project: 2, local: 3, plugin: 4 };
+const SOURCE_RANK = { managed: 0, user: 1, global: 1, project: 2, workspace: 2, local: 3, plugin: 4 };
 
 let tipSequence = 0;
 
@@ -92,8 +92,41 @@ export function isHermes(hook) {
   return Boolean(hook) && hook.harness === "hermes";
 }
 
+export function isAntigravity(hook) {
+  return Boolean(hook) && hook.harness === "antigravity";
+}
+
 export function isPinned(hook) {
-  return isHermes(hook) && Boolean(hook.guard || hook.hard_guard || hook.protected);
+  return (isHermes(hook) || isAntigravity(hook)) && Boolean(hook.guard || hook.hard_guard || hook.protected);
+}
+
+export const AG_MEMBER_SPEC = "ordonnateur";
+
+export function agWritable(hook) {
+  return isAntigravity(hook) && (hook.scope === "global" || hook.scope === "workspace") && Boolean(hook.source_file);
+}
+
+export function agEnabled(hook) {
+  return isAntigravity(hook) && (hook.status === "active" || hook.status === "member");
+}
+
+export function agRuns(hook) {
+  return isAntigravity(hook) && (hook.status === "active" || hook.status === "member" || hook.status === "prompt");
+}
+
+export function agOrderable(hook) {
+  if (!agWritable(hook) || !agEnabled(hook) || isPinned(hook)) return false;
+  return hook.member === true || hook.hook_name !== AG_MEMBER_SPEC;
+}
+
+export function agFileKey(hook) {
+  return `${hook.scope}|${hook.source_file}`;
+}
+
+export function agScopeName(hook) {
+  if (hook.scope === "global") return "Global hooks";
+  if (hook.scope === "workspace") return "Workspace hooks";
+  return hook.plugin || "Plugin hooks";
 }
 
 export function hermesEvents(layout, event) {
@@ -104,6 +137,7 @@ export function hermesEvents(layout, event) {
 
 export function sourceLabel(hook) {
   if (isHermes(hook)) return "Profile config";
+  if (isAntigravity(hook)) return hook.hook_name ? `${agScopeName(hook)} · ${hook.hook_name}` : agScopeName(hook);
   if (hook.plugin) return hook.plugin;
   const codex = hook.harness === "codex";
   if (hook.scope === "managed") return "Managed";
@@ -144,7 +178,21 @@ export function pinReason(hook) {
   return /[.!?]$/.test(text) ? text : `${text}.`;
 }
 
+function agStatus(hook) {
+  if (isPinned(hook)) {
+    return { value: hook.protected ? "protected" : "guard", reason: `Pinned: ${pinReason(hook)}` };
+  }
+  if (hook.status === "member" || isMember(hook)) return null;
+  if (hook.status === "disabled") return { value: "disabled", reason: "This hook spec is switched off (enabled is false)." };
+  if (hook.status === "disabled-plugin") return { value: "disabled_plugin", reason: "The plugin is not enabled." };
+  if (hook.status === "file-skipped") return { value: "file_skipped", reason: "Antigravity skips this whole file." };
+  if (hook.status === "ignored-event") return { value: "ignored_event", reason: "Antigravity ignores this event name." };
+  if (hook.status === "prompt") return { value: "prompt", reason: "A prompt hook calls a model; ordonnateur does not fire it." };
+  return { value: "active", reason: "" };
+}
+
 export function statusOf(hook) {
+  if (isAntigravity(hook)) return agStatus(hook);
   if (isHermes(hook)) {
     const consent = hermesConsent(hook);
     if (isPinned(hook)) {
@@ -172,6 +220,7 @@ export function statusOf(hook) {
 
 export function statusText(hook) {
   if (isMember(hook)) return `member ${memberPosition(hook)}`;
+  if (isAntigravity(hook) && hook.status === "member") return "member";
   const status = statusOf(hook);
   if (!status) return "";
   const labels = {
@@ -186,6 +235,10 @@ export function statusText(hook) {
     allowlisted: "Allowlisted",
     not_allowlisted: "Not allowlisted",
     auto_accepted: "Auto-accepted",
+    active: "Active",
+    file_skipped: "File skipped",
+    ignored_event: "Ignored event",
+    prompt: "Prompt",
   };
   return labels[status.value] || status.value;
 }
@@ -202,11 +255,15 @@ export function visibleHooks(layout, harness, hidden) {
 }
 
 export function harnessesFor(harness) {
-  return harness === "both" ? ["claude-code", "codex", "hermes"] : [harness];
+  return harness === "both" ? ["claude-code", "codex", "hermes", "antigravity"] : [harness];
 }
 
 export function eventSummary(hooks) {
   if (hooks.length && hooks.every(isHermes)) return `${hooks.length} ${hooks.length === 1 ? "hook" : "hooks"} in order`;
+  if (hooks.length && hooks.every(isAntigravity)) {
+    const specs = new Set(hooks.map((hook) => `${hook.source_file}|${hook.hook_name}`)).size;
+    return `${hooks.length} ${hooks.length === 1 ? "hook" : "hooks"} · ${specs} ${specs === 1 ? "spec" : "specs"}`;
+  }
   const natives = hooks.filter((hook) => !isMember(hook)).length;
   const frames = new Set(hooks.filter(isMember).map((hook) => `${hook.scope}|${hook.source_file}`)).size;
   const top = natives + frames;

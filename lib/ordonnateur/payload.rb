@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 # SPDX-License-Identifier: MIT
 
+require "fileutils"
 require "json"
 require "securerandom"
 require "tmpdir"
@@ -117,6 +118,59 @@ module Ordonnateur
       payload = read_file(payload_file) if payload_file
       overrides.each { |key, value| payload[key] = value }
       [payload, directory]
+    end
+
+    def antigravity_tool_args(tool, tmp)
+      file = File.join(tmp, "ordonnateur-fire.txt")
+      case tool
+      when "run_command" then { "CommandLine" => "true" }
+      when "view_file" then { "AbsolutePath" => file }
+      when "write_to_file" then { "TargetFile" => file, "CodeContent" => "ordonnateur test fire\n" }
+      when "list_dir" then { "DirectoryPath" => tmp }
+      else {}
+      end
+    end
+
+    def build_antigravity(event, hook, tmp:, write: false, cwd: nil, payload_file: nil, sets: [])
+      transcript = File.join(tmp, "transcript.jsonl")
+      artifacts = File.join(tmp, "artifacts")
+      if write
+        File.write(transcript, "")
+        FileUtils.mkdir_p(artifacts)
+      end
+      directory = cwd ? File.expand_path(cwd) : tmp
+      overrides = sets.to_h { |text| parse_set(text) }
+      payload = {
+        "conversationId" => "ordonnateur-fire-#{SecureRandom.hex(4)}",
+        "workspacePaths" => [directory],
+        "transcriptPath" => transcript,
+        "artifactDirectoryPath" => artifacts,
+        "modelName" => "ordonnateur-fire",
+        "lastUserInput" => "ordonnateur test fire"
+      }
+      case event
+      when "PreToolUse", "PostToolUse"
+        matcher = hook&.matcher
+        tool = Matcher.first_alternative(matcher) || "run_command"
+        payload["toolCall"] = { "name" => tool, "args" => antigravity_tool_args(tool, tmp) }
+        payload["stepIdx"] = 1
+      when "PreInvocation", "PostInvocation"
+        payload["invocationNum"] = 1
+        payload["initialNumSteps"] = 0
+      when "Stop"
+        payload["executionNum"] = 1
+        payload["terminationReason"] = "NO_TOOL_CALL"
+        payload["error"] = ""
+        payload["fullyIdle"] = true
+      end
+      payload = read_file(payload_file) if payload_file
+      overrides.each { |key, value| payload[key] = value }
+      [payload, directory]
+    end
+
+    def environment_antigravity(payload)
+      id = payload["conversationId"]
+      id.nil? ? {} : { "ANTIGRAVITY_CONVERSATION_ID" => id }
     end
 
     def environment_hermes(_cwd = nil)

@@ -12,6 +12,7 @@ require_relative "timings"
 require_relative "harnesses/claude_code"
 require_relative "harnesses/codex"
 require_relative "harnesses/hermes"
+require_relative "harnesses/antigravity"
 
 module Ordonnateur
   class Watch
@@ -27,6 +28,9 @@ module Ordonnateur
       files.concat(Harnesses::Codex.watch_files(inventory.codex)) if inventory.codex
       hermes = hermes_lines(inventory)
       files.concat(Harnesses::Hermes.watch_files(inventory.hermes)) unless hermes.empty?
+      if inventory.antigravity
+        files.concat(Harnesses::Antigravity.watch_files(inventory.antigravity).select { |path| File.file?(path) })
+      end
       lines = files.uniq.sort.map do |path|
         digest = File.file?(path) ? Digest::SHA256.file(path).hexdigest : "MISSING"
         "#{path}\0#{digest}"

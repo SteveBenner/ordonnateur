@@ -19,6 +19,12 @@ Hermes Agent differs: it already runs an event's shell hooks one after another i
 ordonnateur needs no dispatcher there. It lists, lints and test-fires Hermes hooks, shows which are allowlisted, and
 reorders the entries of one event in place.
 
+Antigravity (the `agy` CLI, the IDE and the 2.0 app share one hook format) runs an event's hooks one after another,
+but only the array inside one hook spec keeps its order: between hook specs, and between files, the order changes
+from session to session (observed with agy 1.4.7). ordonnateur permutes the hooks inside one spec in place, and
+gathers hooks from several specs of one file into a spec named `ordonnateur`, in the order you choose; Antigravity
+then runs them as written, with its own deny, ask and fail-closed rules. `release` puts them back.
+
 ## Install
 
 ordonnateur needs Ruby 3.3 or later and [rplugin](https://github.com/SteveBenner/rplugin) 1.19.0 or later.
@@ -29,6 +35,9 @@ git clone https://github.com/SteveBenner/ordonnateur ~/.rplugins/ordonnateur
 ~/.rplugin/bin/rplugin doctor ordonnateur
 ```
 
+Each release is tagged `vX.Y.Z`. To run a fixed release instead of the clone's current tree, pin its tag:
+`~/.rplugin/bin/rplugin install ~/.rplugins/ordonnateur --ref v0.2.9`; pinning an earlier tag is the rollback.
+
 Codex users must trust the session-start watch hook once in Codex's /hooks view. Hermes users must approve the
 session-start watch hook once (`hermes hooks`); ordonnateur never writes Hermes's allowlist.
 
@@ -37,7 +46,8 @@ session-start watch hook once (`hermes hooks`); ordonnateur never writes Hermes'
 - `ordonnateur list [--harness H] [--event E] [--project DIR] [--json]` lists every hook with id, event, matcher,
   status, timeout and command. Claude Code statuses are native, member#n, dispatcher, guard, not-sequenceable and
   disabled-plugin; Codex statuses are trust-recorded, untrusted, disabled, managed and unknown; Hermes statuses are
-  allowlisted, not-allowlisted and auto-accepted.
+  allowlisted, not-allowlisted and auto-accepted; Antigravity statuses are active, member, disabled, disabled-plugin,
+  file-skipped (Antigravity's loader skips the whole file), ignored-event and prompt.
 - `ordonnateur lint [--harness H] [--project DIR] [--json]` reports findings and exits 1 on any error or warning.
 - `ordonnateur card [--scope user|local] [--project DIR] [--json]` shows a card.
 - `ordonnateur order <Event> <hook>... [--scope] [--stop-on-block|--no-stop-on-block] [--apply]` sets the members.
@@ -47,6 +57,11 @@ session-start watch hook once (`hermes hooks`); ordonnateur never writes Hermes'
   permute the named unpinned hooks of one event among the list slots those hooks already occupy in
   `$HERMES_HOME/config.yaml`; pinned hooks (`fail_closed` on `pre_tool_call`, or policy-protected) keep their place.
   `release`, `card`, `guard` and `unguard` do not apply to Hermes, which has no cards.
+- `order`, `move` and `release` take `--harness antigravity` (chosen automatically for `ag:` ids) with `--scope global`
+  (`~/.gemini/config/hooks.json`) or `--scope workspace --project DIR` (the project's `.agents/hooks.json`). Hooks of
+  one hook spec are permuted in place; hooks from several specs of one file are moved into the spec named
+  `ordonnateur`, and a ledger in ordonnateur's state records where each came from so `release` can return it.
+  `release --file PATH` picks a workspace file when several hold members. `card`, `guard` and `unguard` do not apply.
 - `ordonnateur unguard <hook>` and `ordonnateur guard <hook>` change the card's unguarded list.
 - `ordonnateur fire (<hook>|--event <Event>) [--payload FILE] [--set key=json]... [--cwd DIR] [--run] [--json]`
   prints what it would run; `--run` executes the real commands.
@@ -70,8 +85,8 @@ sequence.
 
 ## The web app
 
-`ordonnateur web` serves a local web app that shows every hook as a layout and changes Claude Code hook order only
-through plans. It reads the same files the command line reads and writes through the same code as `order`, `move`,
+`ordonnateur web` serves a local web app that shows every hook as a layout and changes Claude Code, Hermes and
+Antigravity hook order only through plans. It reads the same files the command line reads and writes through the same code as `order`, `move`,
 `release`, `guard` and `unguard`; it has no database. The contract is `specs/web.yml`.
 
 - **The layout.** The map has one table per harness. Its columns are the harness's events in lifecycle order and its
@@ -85,7 +100,7 @@ through plans. It reads the same files the command line reads and writes through
 - **Sources.** A bar under the title shows one colored toggle for each source (a row of one harness: Claude Code user
   settings, a plugin, Codex's config, Hermes's profile config). Each source keeps its color in every theme, and its
   hooks carry that color as an outline and a rail. Switch a source off and its hooks leave the map and the list; the
-  button goes muted, with Alt+click or `o` to keep only that source Show all to bring everything back and Hide all to switch every source off. Hovering a button highlights that source's cards in the map. Your
+  button goes muted, with Alt+click or `o` to keep only that source Show all to bring everything back and Hide all to switch every source off. Hovering a button highlights that source's cards in the map and its rows in the list. Your
   choice is remembered in the browser, and `?off=codex:user,hermes:user` opens the page with those sources off.
 - **Projects.** The project selector starts on Global Shelf (no project). Select a Folder... opens a folder picker;
   the folder you choose is pinned, selected and its hooks load. It lists folders only, through `GET /api/v1/folders`.
@@ -97,6 +112,11 @@ through plans. It reads the same files the command line reads and writes through
   409 and nothing is written. A reorder inside an event that is already sequenced applies on one click. Sequencing a
   hook, releasing an event, and guard or unguard need the plan id typed. A policy warn or deny is never applied from
   the web; Codex stays read-only.
+- **Antigravity.** Rows are Global hooks, each workspace file, each plugin and Disabled plugins; inside a cell the
+  hooks group by hook spec, and the `ordonnateur` spec is a numbered frame. A cell whose hooks come from two or more
+  specs is marked, because Antigravity runs them in an order that changes every session. Drag inside a spec, or Move
+  up and Move down, to reorder it in place (one click to apply); drag onto the frame or press `s` to gather a hook
+  into the `ordonnateur` spec and `r` to release it (plan id typed). Plugin rows are read-only.
 - **Safety.** The server listens on loopback only. `ordonnateur web` prints a link that works once within 120
   seconds; the page exchanges it for a session cookie the page's scripts cannot read, and every change carries a
   CSRF token, an `Origin` that names the server and a `Host` that names the server, so a page on another site cannot
@@ -124,6 +144,11 @@ Sequencing covers Claude Code user scope and local scope only. Project settings,
 are listed and linted, never changed. Codex is read-only: nothing is written to a Codex file. Hermes keeps one scope
 (the profile `config.yaml`); ordonnateur rewrites only the order of one event's entries there, never a command,
 matcher or timeout, never the allowlist, and a running Hermes gateway keeps its old order until it restarts.
+Antigravity: ordonnateur reads the global `hooks.json`, every `.agents`, `.agent`, `_agents` and `_agent` directory
+from the project up to the repository root, and the plugins under them (with their on/off state from
+`~/.gemini/config/config.json`). It writes only the global file and a workspace file, never a plugin, and never a
+command, matcher, timeout or type. New Antigravity sessions use a new order; a running session may keep the one it
+loaded. Set `RPLUGIN_ANTIGRAVITY_HOME` to read another home than `~/.gemini`.
 SessionEnd,
 PermissionRequest and events outside the sequenceable list are refused. Hooks that are async, not `command` type, or
 that use the powershell shell are not absorbed, and neither is any hook while managed settings set

@@ -6,7 +6,8 @@ description: >
   "test a hook". Claude Code and Codex start every matching hook at once, so ordonnateur installs one dispatcher
   hook per carded event and runs the ordered members itself, one after another. Every changing command is planned
   first and applied only after the user says yes. Guards are never sequenced. Codex is read-only. Hermes hooks are
-  reordered in place in config.yaml; its allowlist is never written.
+  reordered in place in config.yaml; its allowlist is never written. Antigravity runs hook specs in an order that
+  changes every session, so ordonnateur orders them inside one spec of hooks.json; plugin files are never written.
   fire --run executes real commands. `ordonnateur web` shows the hook layout in a browser for the user.
 ---
 
@@ -20,7 +21,7 @@ a new hook to the harness's own settings.
 
 ## How to use it
 
-- `ordonnateur list [--harness claude-code|codex|hermes|all] [--event E] [--json]` lists every hook with its id, event,
+- `ordonnateur list [--harness claude-code|codex|hermes|antigravity|all] [--event E] [--json]` lists every hook with its id, event,
   matcher, status, timeout and command.
 - `ordonnateur lint` reports dead programs, duplicates, escaped hooks, card problems, slow hooks and Codex trust
   gaps. It exits 1 on any error or warning.
@@ -49,4 +50,8 @@ A hook is named by its full id, a unique 8-hex suffix, or a unique substring of 
 - Hermes: list, lint, fire and `order`/`move --harness hermes` work. A Hermes hook that is not allowlisted does not
   run until the user approves it in Hermes; ordonnateur reports that and never approves or writes the allowlist.
   Pinned hooks (`fail_closed` guards, policy-protected hooks) keep their place. Show the plan, apply after yes.
+- Antigravity: list, lint, fire, `order`, `move` and `release --harness antigravity` work on `~/.gemini/config/hooks.json`
+  (`--scope global`) and a project's `.agents/hooks.json` (`--scope workspace --project DIR`). Hooks inside one hook
+  spec are permuted in place; hooks from several specs are gathered into a spec named `ordonnateur`, and `release`
+  puts them back. Plugin hooks are listed and linted, never changed. New sessions use the new order.
 - Settings: `run.record`, `lint.slow_ms`, `watch.enabled`, `alerts.failures`, `events.runs` and the `web.*` group.

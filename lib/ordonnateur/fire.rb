@@ -13,6 +13,7 @@ require_relative "merge"
 require_relative "runner"
 require_relative "recorder"
 require_relative "harnesses/hermes"
+require_relative "harnesses/antigravity"
 
 module Ordonnateur
   class Fire
@@ -30,6 +31,9 @@ module Ordonnateur
       targets, event, card_path = resolve(inventory, options)
       commands = targets.map { |hook| command_text(hook) }
       return call_hermes(targets.first, event, commands.first, options, out) if targets.first&.harness == "hermes"
+      if targets.first&.harness == "antigravity"
+        return call_antigravity(targets.first, event, commands.first, inventory, options, out)
+      end
 
       return run_for_real(targets, commands, card_path, event, options, out) if options[:run]
 
@@ -70,6 +74,9 @@ module Ordonnateur
       if options[:event]
         if Model::HERMES_EVENTS.include?(options[:event]) || Model::HERMES_PYTHON_ONLY_EVENTS.include?(options[:event])
           raise Usage, "Hermes has no cards; ordonnateur reorders its hooks in place"
+        end
+        if Model::ANTIGRAVITY_EVENTS.include?(options[:event]) && !Model::CLAUDE_EVENTS.include?(options[:event])
+          raise Usage, "Antigravity has no cards; ordonnateur orders its hooks in hooks.json; fire one hook at a time"
         end
 
         scope = options[:scope] || "user"
@@ -195,6 +202,118 @@ module Ordonnateur
       out.puts "ran for real: side effects of this hook happened"
     end
 
+    ANTIGRAVITY_RUNNING = %w[active member prompt].freeze
+
+    def call_antigravity(hook, event, command, inventory, options, out)
+      return run_antigravity(hook, event, command, inventory, options, out) if options[:run]
+
+      payload, = Payload.build_antigravity(
+        event, hook, tmp: PLACEHOLDER, write: false, cwd: options[:cwd] || inventory.root,
+        payload_file: options[:payload], sets: options[:sets] || []
+      )
+      judge_cwd = options[:cwd] ? File.expand_path(options[:cwd]) : Dir.pwd
+      report = { "event" => event, "cwd" => File.dirname(hook.source_file),
+                 "environment" => Payload.environment_antigravity(payload), "commands" => [command],
+                 "policy" => [judge(command, judge_cwd)], "payload" => payload, "antigravity" => antigravity_state(hook) }
+      plan_output(report, [hook], out, options)
+    end
+
+    def antigravity_state(hook)
+      { "would_run" => ANTIGRAVITY_RUNNING.include?(hook.status), "status" => hook.status }
+    end
+
+    def antigravity_line(report)
+      state = report["antigravity"]
+      "antigravity would run this hook: #{state['would_run'] ? 'yes' : 'no'} (#{state['status']})"
+    end
+
+    def antigravity_timeout(hook)
+      value = hook.effective_timeout
+      value < 1 ? Model::ANTIGRAVITY_TIMEOUT_DEFAULT : value
+    end
+
+    def antigravity_outcome(result, verdict)
+      return "timeout" if result[:timed_out]
+      return "error" if result[:error] || result[:returncode] != 0
+
+      case verdict[:outcome]
+      when "blocked" then "block"
+      when "ask" then "ask"
+      when "proceed" then "allow"
+      else "ok"
+      end
+    end
+
+    def run_antigravity(hook, event, command, inventory, options, out)
+      if hook.status == "prompt" || hook.type == "prompt"
+        raise Refused, "ordonnateur does not fire #{hook.id}: prompt hooks call a model; ordonnateur does not fire them"
+      end
+      if Harnesses::Antigravity.pinned?(hook)
+        raise Refused, "ordonnateur does not fire #{hook.id}: #{Harnesses::Antigravity.pinned_reason(hook)}"
+      end
+
+      Dir.mktmpdir("ordonnateur-fire") do |tmp|
+        out.puts "fire tmpdir: #{tmp} (removed when the fire finishes)" unless options[:json]
+        payload, = Payload.build_antigravity(
+          event, hook, tmp: tmp, write: true, cwd: options[:cwd] || inventory.root,
+          payload_file: options[:payload], sets: options[:sets] || []
+        )
+        env = Payload.environment_antigravity(payload)
+        cwd = File.dirname(hook.source_file)
+        verdict = judge(command, cwd)
+        report = { "event" => event, "cwd" => cwd, "environment" => env, "commands" => [command],
+                   "policy" => [verdict], "payload" => payload, "tmpdir" => tmp, "antigravity" => antigravity_state(hook) }
+        guard_run!([hook], [command], [verdict])
+        execute_antigravity(report, hook, event, payload, env, cwd, out, options)
+      end
+      0
+    end
+
+    def execute_antigravity(report, hook, event, payload, env, cwd, out, options)
+      timeout = antigravity_timeout(hook)
+      result = Harnesses::Antigravity.run_hook(hook, JSON.generate(payload), timeout: timeout, env: env, cwd: cwd)
+      verdict = Harnesses::Antigravity.interpret(event, result)
+      outcome = antigravity_outcome(result, verdict)
+      entry = {
+        id: hook.id, ran: true, outcome: outcome, antigravity_outcome: verdict[:outcome], exit: result[:returncode],
+        ms: result[:elapsed_ms], timeout_s: timeout, raw_stdout: result[:stdout], raw_stderr: result[:stderr],
+        stdout: result[:stdout], stderr: result[:stderr], stdout_bytes: result[:stdout].to_s.bytesize,
+        error: result[:error]
+      }
+      decision = verdict[:directive].is_a?(Hash) ? verdict[:directive]["decision"] : nil
+      record = {
+        "at" => Time.now.utc.iso8601, "source" => "fire", "harness" => "antigravity", "scope" => hook.scope,
+        "event" => event, "card" => nil, "session_id" => payload["conversationId"], "total_ms" => result[:elapsed_ms],
+        "verdict" => { "decision" => verdict[:blocked] ? "block" : decision, "blocked" => verdict[:blocked] },
+        "members" => [Runner.member_record(entry)]
+      }
+      store(record)
+      print_antigravity_run(report, entry, verdict, out, options)
+    end
+
+    def print_antigravity_run(report, entry, verdict, out, options)
+      shown = {
+        "id" => entry[:id], "exit" => entry[:exit], "ms" => entry[:ms], "outcome" => entry[:antigravity_outcome],
+        "stdout" => entry[:raw_stdout].to_s[0, CAP], "stderr" => entry[:raw_stderr].to_s[0, CAP], "error" => entry[:error]
+      }
+      if options[:json]
+        out.puts JSON.pretty_generate(
+          report.merge("ran" => true, "members" => [shown], "blocked" => verdict[:blocked], "outcome" => verdict[:outcome],
+                       "directive" => verdict[:directive], "message" => verdict[:message])
+        )
+        return
+      end
+      out.puts antigravity_line(report)
+      out.puts "cwd: #{report['cwd']}"
+      out.puts "member #{entry[:id]}: exit #{entry[:exit].inspect}, #{entry[:ms]} ms, #{entry[:antigravity_outcome]}"
+      out.puts "  error: #{entry[:error]}" if entry[:error]
+      out.puts "  stdout: #{entry[:raw_stdout].to_s[0, CAP]}" unless entry[:raw_stdout].to_s.empty?
+      out.puts "  stderr: #{entry[:raw_stderr].to_s[0, CAP]}" unless entry[:raw_stderr].to_s.empty?
+      out.puts "blocked: #{verdict[:blocked] ? 'yes' : 'no'}#{verdict[:message] ? " (#{verdict[:message]})" : ''}"
+      out.puts "directive: #{verdict[:directive] ? JSON.generate(verdict[:directive]) : '(none)'}"
+      out.puts "ran for real: side effects of this hook happened"
+    end
+
     def command_text(hook)
       args = hook.args
       args && !args.empty? ? Shellwords.join([hook.command, *args]) : hook.command.to_s
@@ -222,6 +341,7 @@ module Ordonnateur
       out.puts "cwd: #{report['cwd']}"
       out.puts "environment: #{report['environment'].map { |k, v| "#{k}=#{v}" }.join(' ')}"
       out.puts hermes_line(report) if report["hermes"]
+      out.puts antigravity_line(report) if report["antigravity"]
       out.puts "payload:"
       out.puts JSON.pretty_generate(report["payload"])
       out.puts "not run; add --run to execute it for real"

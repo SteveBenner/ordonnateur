@@ -19,6 +19,10 @@ const KINDS = {
     allowlisted: { label: "Allowlisted", icon: "check", tone: "ok" },
     not_allowlisted: { label: "Not allowlisted", icon: "warn", tone: "warn" },
     auto_accepted: { label: "Auto-accepted", icon: null, tone: "neutral" },
+    active: { label: "Active", icon: null, tone: "neutral" },
+    file_skipped: { label: "File skipped", icon: "error", tone: "danger" },
+    ignored_event: { label: "Ignored event", icon: "warn", tone: "warn" },
+    prompt: { label: "Prompt", icon: null, tone: "neutral" },
   },
   plan: {
     reorder: { label: "Reorder", icon: null, tone: "neutral" },

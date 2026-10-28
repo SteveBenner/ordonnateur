@@ -6,10 +6,11 @@ require_relative "card"
 require_relative "harnesses/claude_code"
 require_relative "harnesses/codex"
 require_relative "harnesses/hermes"
+require_relative "harnesses/antigravity"
 
 module Ordonnateur
   module Inventory
-    Result = Struct.new(:hooks, :notes, :root, :claude, :codex, :hermes, :members, :cards, keyword_init: true) do
+    Result = Struct.new(:hooks, :notes, :root, :claude, :codex, :hermes, :antigravity, :members, :cards, keyword_init: true) do
       def initialize(**values)
         super
         self.members ||= []
@@ -17,9 +18,9 @@ module Ordonnateur
       end
     end
 
-    HARNESSES = %w[claude-code codex hermes all].freeze
+    HARNESSES = %w[claude-code codex hermes antigravity all].freeze
 
-    HARNESS_RANK = { "claude-code" => 0, "codex" => 1, "hermes" => 2 }.freeze
+    HARNESS_RANK = { "claude-code" => 0, "codex" => 1, "hermes" => 2, "antigravity" => 3 }.freeze
 
     module_function
 
@@ -30,13 +31,19 @@ module Ordonnateur
       claude = %w[all claude-code].include?(harness) ? Harnesses::ClaudeCode.load(root) : nil
       codex = %w[all codex].include?(harness) ? Harnesses::Codex.load(root) : nil
       hermes = %w[all hermes].include?(harness) ? Harnesses::Hermes.load(root) : nil
-      notes = Array(claude && claude[:notes]) + Array(codex && codex[:notes]) + Array(hermes && hermes[:notes])
+      antigravity = %w[all antigravity].include?(harness) ? Harnesses::Antigravity.load(root, File.expand_path(project || Dir.pwd)) : nil
+      notes = Array(claude && claude[:notes]) + Array(codex && codex[:notes]) + Array(hermes && hermes[:notes]) +
+              Array(antigravity && antigravity[:notes])
       hooks = []
       hooks.concat(classify_claude(claude, unguarded, policy)) if claude
       hooks.concat(codex[:hooks]) if codex
       hooks.concat(classify_hermes(hermes, policy)) if hermes
+      hooks.concat(classify_antigravity(antigravity, policy)) if antigravity
       mark_protected(hooks, policy)
-      Result.new(hooks: order(hooks), notes: notes, root: root, claude: claude, codex: codex, hermes: hermes)
+      Result.new(
+        hooks: order(hooks), notes: notes, root: root, claude: claude, codex: codex, hermes: hermes,
+        antigravity: antigravity
+      )
     end
 
     def load_full(harness: "all", project: nil, policy: nil)
@@ -146,6 +153,31 @@ module Ordonnateur
         hook.reason = reason
       end
       hermes[:hooks]
+    end
+
+    def antigravity_refusal(hook, files)
+      return "is a plugin hook; plugin files are read-only" if hook.plugin
+      return "is in a disabled plugin" if hook.status == "disabled-plugin"
+
+      if hook.status == "file-skipped"
+        entry = files.find { |file| file[:path] == hook.source_file }
+        return "is in a file Antigravity skips whole: #{entry && entry[:error]}"
+      end
+      return "is on #{hook.event}, which Antigravity ignores" if hook.status == "ignored-event"
+      return "is in the disabled hook spec #{hook.hook_name.inspect}" if hook.status == "disabled"
+      return "is a prompt hook; ordonnateur orders command hooks" if hook.status == "prompt"
+
+      Harnesses::Antigravity.pinned_reason(hook)&.then { |reason| "#{reason}; pinned hooks keep their place" }
+    end
+
+    def classify_antigravity(antigravity, policy)
+      mark_protected(antigravity[:hooks], policy)
+      antigravity[:hooks].each do |hook|
+        reason = antigravity_refusal(hook, antigravity[:files])
+        hook.absorbable = reason.nil?
+        hook.reason = reason
+      end
+      antigravity[:hooks]
     end
 
     def describe(hook)

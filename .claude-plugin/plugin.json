@@ -1,6 +1,6 @@
 {
   "name": "ordonnateur",
-  "version": "0.2.7",
+  "version": "0.2.9",
   "description": "Puts each harness event's hooks in the order you choose, and lists, lints, times and test-fires every hook.",
   "repository": "https://github.com/SteveBenner/ordonnateur",
   "license": "MIT",

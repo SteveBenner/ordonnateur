@@ -59,6 +59,20 @@ module Ordonnateur
 
     HERMES_RESERVED_KEYS = %w[output_spill outbound].freeze
 
+    ANTIGRAVITY_EVENTS = %w[SessionStart PreInvocation PreToolUse PostToolUse PostInvocation Stop].freeze
+
+    ANTIGRAVITY_TOOL_EVENTS = %w[PreToolUse PostToolUse].freeze
+
+    ANTIGRAVITY_TIMEOUT_DEFAULT = 30
+
+    ANTIGRAVITY_MEMBER_SPEC = "ordonnateur"
+
+    ANTIGRAVITY_DOT_DIRS = %w[.agents .agent _agents _agent].freeze
+
+    ANTIGRAVITY_CLAUDE_TOOLS = %w[
+      Bash Read Write Edit MultiEdit NotebookEdit Glob Grep LS WebFetch WebSearch Task TodoWrite
+    ].freeze
+
     MATCHER_FIELD = {
       "PreToolUse" => "tool_name",
       "PostToolUse" => "tool_name",
@@ -101,6 +115,7 @@ module Ordonnateur
 
     def default_timeout(event, harness: nil)
       return 60 if harness == "hermes"
+      return ANTIGRAVITY_TIMEOUT_DEFAULT if harness == "antigravity"
 
       event == "UserPromptSubmit" ? 30 : 600
     end
@@ -113,6 +128,7 @@ module Ordonnateur
       case harness
       when "codex" then CODEX_EVENTS
       when "hermes" then HERMES_EVENTS
+      when "antigravity" then ANTIGRAVITY_EVENTS
       else CLAUDE_EVENTS
       end
     end
@@ -121,6 +137,7 @@ module Ordonnateur
       case harness
       when "codex" then "codex"
       when "hermes" then "hm"
+      when "antigravity" then "ag"
       else "cc"
       end
     end
@@ -147,7 +164,7 @@ module Ordonnateur
       ATTRIBUTES = %i[
         harness scope source_file plugin plugin_root plugin_enabled event matcher hook line
         group_index handler_index id digest status absorbable reason member_position trust
-        policy_protected policy_reason
+        policy_protected policy_reason hook_name
       ].freeze
 
       attr_accessor(*ATTRIBUTES)
@@ -198,6 +215,12 @@ module Ordonnateur
       end
 
       def to_h
+        base = base_h
+        base["hook_name"] = @hook_name if @harness == "antigravity"
+        base
+      end
+
+      def base_h
         {
           "id" => @id,
           "harness" => @harness,

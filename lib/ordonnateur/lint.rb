@@ -11,6 +11,14 @@ module Ordonnateur
   module Lint
     BUILTINS = %w(true false exit echo test [ cd : printf).freeze
     FAILING = %w[error warn].freeze
+    ANTIGRAVITY_BUILTINS = %w[. exec eval export set unset read trap wait].freeze
+    ANTIGRAVITY_INERT = %w[file-skipped ignored-event].freeze
+    ANTIGRAVITY_RUNNING = %w[active member prompt].freeze
+    ANTIGRAVITY_TOOL_FIXES = {
+      "Bash" => "run_command", "Read" => "view_file", "Write" => "write_to_file", "Edit" => "replace_file_content",
+      "MultiEdit" => "multi_replace_file_content", "Glob" => "find_by_name", "Grep" => "grep_search", "LS" => "list_dir",
+      "WebFetch" => "read_url_content", "WebSearch" => "search_web", "Task" => "invoke_subagent"
+    }.freeze
 
     module_function
 
@@ -41,6 +49,7 @@ module Ordonnateur
       found.concat(timing(rows, slow_ms))
       found.concat(codex(inventory))
       found.concat(hermes(inventory))
+      found.concat(antigravity(inventory))
       found = found.select { |item| harness == "all" || item["harness"].nil? || item["harness"] == harness }
       found.sort_by { |item| [%w[error warn info].index(item["severity"]), item["code"], item["hook"].to_s] }
     end
@@ -89,16 +98,25 @@ module Ordonnateur
       hooks.filter_map do |hook|
         next unless hook.command && (hook.type.nil? || hook.type == "command")
         next if hook.status == "disabled"
+        next if hook.harness == "antigravity" && ANTIGRAVITY_INERT.include?(hook.status)
 
         word = hook.harness == "hermes" ? hermes_program(hook) : program_of(hook)
         next if word.nil? || word.empty?
 
-        word = expand(word, hook, inventory.root) unless hook.harness == "hermes"
+        if hook.harness == "antigravity"
+          next if word.include?("$")
+
+          word = word.sub(/\A~(?=\/|\z)/, Dir.home)
+          word = File.expand_path(word, File.dirname(hook.source_file)) if word.include?("/")
+        elsif hook.harness != "hermes"
+          word = expand(word, hook, inventory.root)
+        end
         next if word.include?("$")
 
+        builtins = hook.harness == "antigravity" ? BUILTINS + ANTIGRAVITY_BUILTINS : BUILTINS
         ok =
           if word.include?("/") then executable_file?(word)
-          elsif BUILTINS.include?(word) then true
+          elsif builtins.include?(word) then true
           else ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).any? { |dir| executable_file?(File.join(dir, word)) }
           end
         next if ok
@@ -116,8 +134,10 @@ module Ordonnateur
     end
 
     def duplicates(hooks)
-      pool = hooks.select { |hook| hook.command && !hook.status.to_s.start_with?("member#") && hook.status != "dispatcher" }
-      pool.group_by { |hook| [hook.harness, hook.event, hook.command] }.filter_map do |(harness, event, command), list|
+      pool = hooks.select do |hook|
+        hook.harness != "antigravity" && hook.command && !hook.status.to_s.start_with?("member#") && hook.status != "dispatcher"
+      end
+      found = pool.group_by { |hook| [hook.harness, hook.event, hook.command] }.filter_map do |(harness, event, command), list|
         pairs = []
         list.combination(2) do |a, b|
           next if a.source_file == b.source_file
@@ -134,10 +154,31 @@ module Ordonnateur
         message += "; Claude Code runs identical settings-file handlers once" if severity == "info"
         finding("ORD-DUP", severity, pairs.first.first.id, message, "keep one definition", harness: harness)
       end
+      found + antigravity_duplicates(hooks)
+    end
+
+    def antigravity_duplicates(hooks)
+      pool = hooks.select do |hook|
+        hook.harness == "antigravity" && hook.command && ANTIGRAVITY_RUNNING.include?(hook.status)
+      end
+      pool.group_by { |hook| [hook.source_file, hook.event, hook.command] }.filter_map do |(file, event, command), list|
+        pairs = []
+        list.combination(2) do |a, b|
+          next unless Matcher.overlap?(a.matcher, b.matcher)
+
+          pairs << [a, b]
+        end
+        next if pairs.empty?
+
+        message = "#{command[0, 60]} on #{event} is defined #{pairs.flatten.uniq.length} times in #{file}; Antigravity runs each"
+        finding("ORD-DUP", "warn", pairs.first.first.id, message, "keep one definition", harness: "antigravity")
+      end
     end
 
     def matchers_and_events(hooks)
       hooks.flat_map do |hook|
+        next [] if hook.harness == "antigravity"
+
         found = []
         if hook.harness == "hermes"
           unless Matcher.valid?(hook.matcher)
@@ -407,6 +448,192 @@ module Ordonnateur
         found << finding("ORD-HERMES-ALLOWLIST", "warn", state[:allowlist_path],
                          "the allowlist exists but is unreadable or malformed, so Hermes treats every hook as not approved",
                          "repair it in Hermes", harness: "hermes")
+      end
+      found
+    end
+
+    def antigravity(inventory)
+      state = inventory.antigravity
+      return [] unless state
+
+      files = state[:files].reject { |file| file[:plugin] && !file[:enabled] }
+      hooks = inventory.hooks.select do |hook|
+        hook.harness == "antigravity" && !(hook.plugin && !hook.plugin_enabled)
+      end
+      found = antigravity_files(files)
+      found.concat(antigravity_hooks(hooks))
+      found.concat(antigravity_groups(files))
+      found.concat(antigravity_order(hooks))
+      found.concat(antigravity_ledgers(files, hooks, state[:ledgers]))
+      found
+    end
+
+    def antigravity_finding(code, severity, subject, message, fix = nil)
+      finding(code, severity, subject, message, fix, harness: "antigravity")
+    end
+
+    def antigravity_files(files)
+      files.flat_map do |file|
+        path = file[:path]
+        unless file[:json]
+          next [antigravity_finding("ORD-AG-NOTJSON", "error", path, "Antigravity cannot read this file: #{file[:error]}", "fix the file")]
+        end
+
+        found = []
+        if file[:error]
+          found << antigravity_finding("ORD-AG-SKIPPED", "error", path, "Antigravity skips this whole file: #{file[:error]}", "fix the file")
+        end
+        file[:duplicates].each do |name|
+          found << antigravity_finding("ORD-AG-DUPNAME", "warn", "#{path} #{name}",
+                                       "the hook name #{name.inspect} appears more than once in #{path}; the last one wins",
+                                       "rename or merge the duplicates")
+        end
+        if file[:data].is_a?(Hash) && file[:error].nil?
+          file[:data].each do |name, spec|
+            next unless spec.is_a?(Hash) && spec["enabled"] == false
+
+            found << antigravity_finding("ORD-AG-DISABLED", "info", "#{path} #{name}",
+                                         "hook #{name.inspect} is disabled (enabled is false), so none of its handlers run")
+          end
+        end
+        found
+      end
+    end
+
+    def antigravity_alternatives(matcher)
+      matcher.split("|").map { |item| item.strip.sub(/\A[\^(]+/, "").sub(/[)$]+\z/, "") }
+    end
+
+    def antigravity_tool_names(hook)
+      names = antigravity_alternatives(hook.matcher) & Model::ANTIGRAVITY_CLAUDE_TOOLS
+      return nil if names.empty?
+
+      fixes = names.filter_map { |name| (tool = ANTIGRAVITY_TOOL_FIXES[name]) && "#{tool} for #{name}" }
+      fix = fixes.empty? ? "use Antigravity tool names" : "use #{fixes.join(', ')}"
+      [names, fix]
+    end
+
+    def antigravity_hooks(hooks)
+      hooks.flat_map do |hook|
+        next [] if hook.status == "file-skipped"
+
+        if hook.status == "ignored-event"
+          next [antigravity_finding("ORD-AG-EVENT", "warn", hook, "#{hook.event} is not an Antigravity event, so Antigravity ignores the hook",
+                                    "check the event name")]
+        end
+        next [] if hook.command.nil? && hook.type != "prompt"
+
+        found = []
+        if hook.status == "prompt"
+          found << antigravity_finding("ORD-AG-PROMPT", "info", hook, "is a prompt hook; ordonnateur cannot fire a prompt hook")
+        end
+        if Model::ANTIGRAVITY_TOOL_EVENTS.include?(hook.event) && hook.matcher.is_a?(String)
+          if Matcher.valid?(hook.matcher)
+            names, fix = antigravity_tool_names(hook)
+            if names
+              found << antigravity_finding("ORD-AG-CLAUDE-TOOL", "warn", hook,
+                                           "matcher #{hook.matcher.inspect} names Claude Code #{names.length == 1 ? 'tool' : 'tools'} #{names.join(', ')}, which never match in Antigravity",
+                                           fix)
+            end
+          else
+            found << antigravity_finding("ORD-AG-MATCHER", "warn", hook, "matcher #{hook.matcher.inspect} does not compile, so it never matches",
+                                         "fix the regular expression")
+          end
+        elsif !Model::ANTIGRAVITY_TOOL_EVENTS.include?(hook.event) && hook.hook.key?("matcher")
+          found << antigravity_finding("ORD-AG-MATCHER-IGNORED", "info", hook,
+                                       "#{hook.event} is not a tool event, so Antigravity ignores the matcher #{hook.hook['matcher'].inspect}",
+                                       "remove the matcher")
+        end
+        timeout = hook.hook["timeout"]
+        if timeout.is_a?(Integer) && timeout <= 0
+          found << antigravity_finding("ORD-AG-TIMEOUT", "warn", hook, "timeout #{timeout} is not a positive number of seconds",
+                                       "use a positive timeout or remove it")
+        end
+        found
+      end
+    end
+
+    def antigravity_groups(files)
+      found = []
+      files.each do |file|
+        next unless file[:data].is_a?(Hash) && file[:error].nil?
+
+        file[:data].each do |name, spec|
+          next unless spec.is_a?(Hash)
+
+          Model::ANTIGRAVITY_TOOL_EVENTS.each do |event|
+            next unless spec[event].is_a?(Array)
+
+            spec[event].each_with_index do |entry, index|
+              next unless entry.is_a?(Hash)
+              next if entry["hooks"].is_a?(Array) && !entry["hooks"].empty?
+
+              found << antigravity_finding("ORD-AG-NOHOOKS", "warn", "#{file[:path]} #{name} #{event}[#{index}]",
+                                           "this #{event} group has no hooks, so it runs nothing", "add handlers or remove the group")
+            end
+          end
+        end
+      end
+      found
+    end
+
+    def antigravity_order(hooks)
+      running = hooks.select do |hook|
+        ANTIGRAVITY_RUNNING.include?(hook.status) && (hook.command || hook.type == "prompt")
+      end
+      running.group_by(&:event).filter_map do |event, list|
+        specs = list.map { |hook| [hook.source_file, hook.hook_name] }.uniq
+        next if specs.length < 2
+
+        files = list.map(&:source_file).uniq
+        ordered = list.select(&:absorbable)
+        fix =
+          if files.length == 1 && list.none?(&:plugin) && ordered.length >= 2
+            "ordonnateur order #{event} #{ordered.map(&:id).join(' ')} --harness antigravity#{antigravity_project_flag(list.first)}"
+          else
+            "Antigravity keeps no order between hook specs or files"
+          end
+        antigravity_finding("ORD-AG-RANDOM-ORDER", "warn", event,
+                            "#{list.length} handlers from #{specs.length} hook specs run on #{event}: these hooks run in an order that changes every session",
+                            fix)
+      end
+    end
+
+    def antigravity_project_flag(hook)
+      return "" unless hook && hook.scope == "workspace" && hook.source_file
+
+      " --project #{Shellwords.escape(File.dirname(hook.source_file, 2))}"
+    end
+
+    def antigravity_release_fix(event, path, scope)
+      flags = scope == "workspace" ? " --scope workspace --project #{Shellwords.escape(File.dirname(path, 2))}" : ""
+      "ordonnateur release #{event} --harness antigravity#{flags}"
+    end
+
+    def antigravity_ledgers(files, hooks, ledgers)
+      found = []
+      files.each do |file|
+        ledger = ledgers[file[:path]]
+        next unless ledger
+
+        held = hooks.select do |hook|
+          hook.source_file == file[:path] && hook.hook_name == Model::ANTIGRAVITY_MEMBER_SPEC && hook.plugin.nil?
+        end.group_by(&:event)
+        events = (ledger["events"].keys + held.keys).uniq
+        events.each do |event|
+          named = Array(ledger["events"][event]).filter_map { |entry| entry["digest"] if entry.is_a?(Hash) }
+          present = Array(held[event]).map(&:digest)
+          unless (named - present).empty?
+            found << antigravity_finding("ORD-AG-LEDGER", "warn", "#{file[:path]} #{event}",
+                                         "the ledger names #{(named - present).length} member(s) of #{event} that are no longer in the ordonnateur hook spec",
+                                         antigravity_release_fix(event, file[:path], file[:scope]))
+          end
+          next if (present - named).empty?
+
+          found << antigravity_finding("ORD-AG-LEDGER", "warn", "#{file[:path]} #{event}",
+                                       "the ordonnateur hook spec holds #{(present - named).length} handler(s) on #{event} that the ledger does not name",
+                                       antigravity_release_fix(event, file[:path], file[:scope]))
+        end
       end
       found
     end
