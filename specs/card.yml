@@ -33,5 +33,5 @@ fields:
 canonical_json: "JSON.generate of the value with object keys sorted recursively."
 rules:
   - "Members run in list order. A member whose matcher does not match the payload is skipped without being shown."
-  - "A member whose digest no longer matches its matcher and hook is not run and lint reports ORD-CARD-DIGEST."
+  - "A member whose digest no longer matches its matcher and hook is not run and lint reports ORD-CARD-DIGEST. On a guard event (PreToolUse, UserPromptSubmit, PreCompact) that member counts as a block with exit 2 and the reason, as does a card that cannot be read, an event with no entry or a payload that is not a JSON object; on any other event they are reported with exit 1."
   - "The dispatcher entry for an event exists exactly while the event has members."

@@ -38,11 +38,16 @@ module Ordonnateur
       end
       payload = begin
         parsed = JSON.parse(input.read.to_s)
-        parsed.is_a?(Hash) ? parsed : {}
+        parsed.is_a?(Hash) ? parsed : nil
       rescue JSON::ParserError
-        {}
+        nil
       end
-      execution = execute(event, path, payload, source: "dispatch")
+      execution =
+        if payload.nil? && Model::GUARD_EVENTS.include?(event)
+          failure(event, path, {}, "dispatch", "the #{event} payload is not a JSON object", clock)
+        else
+          execute(event, path, payload || {}, source: "dispatch")
+        end
       out.puts JSON.generate(execution.stdout) if execution.stdout
       err.puts execution.stderr if execution.stderr && !execution.stderr.empty?
       out.flush
@@ -58,13 +63,19 @@ module Ordonnateur
       Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
 
+    def guard_event?(event)
+      Model::GUARD_EVENTS.include?(event)
+    end
+
     def failure(event, path, payload, source, reason, started)
+      guard = guard_event?(event)
       record = {
         "at" => now, "source" => source, "harness" => "claude-code", "scope" => nil, "event" => event,
         "card" => path, "session_id" => payload["session_id"], "total_ms" => ((clock - started) * 1000).round,
-        "verdict" => { "decision" => "failure", "blocked" => false }, "members" => []
+        "verdict" => { "decision" => guard ? "deny" : "failure", "blocked" => guard }, "members" => []
       }
-      Execution.new(stdout: nil, stderr: "ordonnateur: #{reason}; run `ordonnateur lint`", exit: 1, record: record, details: [])
+      text = guard ? "ordonnateur: #{reason}; #{event} is blocked until the card is fixed; run `ordonnateur lint`" : "ordonnateur: #{reason}; run `ordonnateur lint`"
+      Execution.new(stdout: nil, stderr: text, exit: guard ? 2 : 1, record: record, details: [])
     end
 
     def execute(event, path, payload, source:, env: {}, cwd: nil)
@@ -104,7 +115,12 @@ module Ordonnateur
       if field && !Matcher.matches?(member["matcher"], payload[field])
         return base.merge(outcome: "unmatched")
       end
-      return base.merge(outcome: "digest-mismatch") unless Card.digest_ok?(member)
+      unless Card.digest_ok?(member)
+        return base.merge(outcome: "digest-mismatch") unless guard_event?(event)
+
+        reason = "ordonnateur: #{member['id'].to_s.split(':').last} not run: card entry edited by hand, so #{event} is blocked; run ordonnateur lint"
+        return base.merge(outcome: event == "PreToolUse" ? "deny" : "block", exit: 2, stderr: reason, raw_stderr: reason, raw_stdout: "")
+      end
 
       result = Member.run(member["hook"], JSON.generate(current), timeout, env: env, cwd: cwd)
       base.merge(Member.interpret(event, result)).merge(ran: true)
