@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.10] - 2026-10-28
+
+### Fixed
+
+- Release checks no longer depend on the caller's PATH to find the installed command or Antigravity's `agy`.
+
 ## [0.2.9] - 2026-10-27
 
 ### Fixed

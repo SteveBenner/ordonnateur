@@ -36,7 +36,7 @@ git clone https://github.com/SteveBenner/ordonnateur ~/.rplugins/ordonnateur
 ```
 
 Each release is tagged `vX.Y.Z`. To run a fixed release instead of the clone's current tree, pin its tag:
-`~/.rplugin/bin/rplugin install ~/.rplugins/ordonnateur --ref v0.2.9`; pinning an earlier tag is the rollback.
+`~/.rplugin/bin/rplugin install ~/.rplugins/ordonnateur --ref v0.2.10`; pinning an earlier tag is the rollback.
 
 Codex users must trust the session-start watch hook once in Codex's /hooks view. Hermes users must approve the
 session-start watch hook once (`hermes hooks`); ordonnateur never writes Hermes's allowlist.
