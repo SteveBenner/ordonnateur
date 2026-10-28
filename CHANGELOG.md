@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.12] - 2026-10-28
+
+### Fixed
+
+- The dispatcher fails closed on a guard event. On PreToolUse, UserPromptSubmit and PreCompact, a card that cannot be
+  read, an event the card has no entry for, a payload that is not a JSON object, or a member whose digest no longer
+  matches its entry now ends the event with exit 2 and the reason (`lib/ordonnateur/runner.rb`). Why: these cases
+  exited 1, or ran the remaining members with an empty payload, and Claude Code treats exit 1 as non-blocking, so a
+  guard hook sequenced into a card could be skipped by breaking the card or editing one entry by hand. On every other
+  event the same faults still exit 1 and the event goes on. The run record carries `decision: deny` and `blocked: true`
+  for these cases.
+
+## [0.2.11] - 2026-10-28
+
+### Fixed
+
+- `bin/ordonnateur` reads and writes text as UTF-8 whatever the locale (`Encoding.default_external`). Why: with no
+  `LANG` or `LC_ALL`, Ruby read the harness settings as US-ASCII and `list` and `lint` stopped with "invalid byte
+  sequence in US-ASCII" at `claude_code.rb` on any settings file holding a non-ASCII character.
+
 ## [0.2.10] - 2026-10-28
 
 ### Fixed

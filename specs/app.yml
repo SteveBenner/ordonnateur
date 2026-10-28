@@ -1,6 +1,6 @@
 schema_version: 1
 name: ordonnateur
-version: 0.2.10
+version: 0.2.12
 kind: plugin
 purpose: >
   Gives each Claude Code event an ordered card of hooks that ordonnateur runs one after another from a single

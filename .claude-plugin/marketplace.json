@@ -9,7 +9,7 @@
       "name": "ordonnateur",
       "source": "./",
       "description": "Puts each harness event's hooks in the order you choose, and lists, lints, times and test-fires every hook.",
-      "version": "0.2.10"
+      "version": "0.2.12"
     }
   ]
 }

@@ -36,7 +36,7 @@ git clone https://github.com/SteveBenner/ordonnateur ~/.rplugins/ordonnateur
 ```
 
 Each release is tagged `vX.Y.Z`. To run a fixed release instead of the clone's current tree, pin its tag:
-`~/.rplugin/bin/rplugin install ~/.rplugins/ordonnateur --ref v0.2.10`; pinning an earlier tag is the rollback.
+`~/.rplugin/bin/rplugin install ~/.rplugins/ordonnateur --ref v0.2.12`; pinning an earlier tag is the rollback.
 
 Codex users must trust the session-start watch hook once in Codex's /hooks view. Hermes users must approve the
 session-start watch hook once (`hermes hooks`); ordonnateur never writes Hermes's allowlist.
@@ -81,7 +81,10 @@ settings file changed meanwhile.
 A card is YAML (`specs/card.yml`). The user card is `${CLAUDE_CONFIG_DIR:-~/.claude}/ordonnateur.yml`; a local card
 lives under `${XDG_STATE_HOME:-~/.local/state}/rplugin/ordonnateur/cards/`, never inside a repository. Members run
 in list order, with the digest of each checked before it runs. With `stop_on_block`, a member that blocks ends the
-sequence.
+sequence. On a guard event (PreToolUse, UserPromptSubmit, PreCompact) the dispatcher fails closed: a card that cannot
+be read, an event the card has no entry for, a payload that is not a JSON object, or a member whose digest no longer
+matches its entry ends the event with exit 2 and the reason, so a hook behind the dispatcher cannot be skipped by
+editing the card. On every other event the same faults are reported with exit 1 and the event goes on.
 
 ## The web app
 
