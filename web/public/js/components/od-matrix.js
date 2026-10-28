@@ -17,11 +17,14 @@ import {
   nextId,
   visibleHooks,
   allHooks,
+  agOrderable,
+  agRuns,
+  isAntigravity,
 } from "../core/hooks.js";
 import { providerKey, providerMeta, rowKeyOfHook, rowLabel } from "../core/sources.js";
-import { cardStop, project as projectDraft, projectHermes } from "../core/draft.js";
+import { agSequenceReason, agUnits, cardStop, project as projectDraft, projectAntigravity, projectHermes } from "../core/draft.js";
 import { buildEdges, clearEdges, createSvg, renderEdges, sizeSvg } from "../core/edges.js";
-import { commit, commitHermes, shortcut } from "./od-hook-menu.js";
+import { commit, commitAntigravity, commitHermes, shortcut } from "./od-hook-menu.js";
 
 const NS = "http://www.w3.org/2000/svg";
 const DRAG_THRESHOLD = 4;
@@ -78,6 +81,13 @@ function allOff(ctx) {
 function rowPath(key, hooks, ctx, harness) {
   const files = ctx.layout.settings_files || {};
   if (harness === "hermes") return files.hermes || "";
+  if (harness === "antigravity") {
+    const own = files.antigravity || {};
+    if (key === "global") return own.global || "";
+    if (key.startsWith("workspace:")) return key.slice(10);
+    const first = hooks.find((hook) => hook.source_file);
+    return first ? first.source_file : "";
+  }
   if (harness === "claude-code" && (key === "user" || key === "local") && files[key]) return files[key];
   if (harness === "codex" && key === "user" && files.codex) return files.codex;
   const own = hooks.find((hook) => !isMember(hook) && hook.source_file);
@@ -86,6 +96,36 @@ function rowPath(key, hooks, ctx, harness) {
   if (entry && entry.card && entry.card.settings_file) return entry.card.settings_file;
   if (key === "local" && ctx.project) return `${ctx.project}/.claude/settings.local.json`;
   return "";
+}
+
+function antigravityRows(groups, ctx) {
+  const files = (ctx.layout.settings_files && ctx.layout.settings_files.antigravity) || {};
+  const hidden = hiddenOf(ctx);
+  const keys = [];
+  if (groups.has("global") || !hidden.has("antigravity:global")) keys.push("global");
+  const workspace = new Set(ctx.project ? files.workspace || [] : []);
+  for (const key of groups.keys()) if (key.startsWith("workspace:")) workspace.add(key.slice(10));
+  for (const path of workspace) {
+    if (groups.has(`workspace:${path}`) || !hidden.has(`antigravity:workspace:${path}`)) keys.push(`workspace:${path}`);
+  }
+  keys.push(...[...groups.keys()].filter((key) => key.startsWith("plugin:")).sort((a, b) => a.localeCompare(b)));
+  if (groups.has("disabled")) keys.push("disabled");
+  for (const key of groups.keys()) if (!keys.includes(key)) keys.push(key);
+  return keys.map((key) => {
+    const rowHooks = groups.get(key) || [];
+    const own = key === "global" || key.startsWith("workspace:");
+    return {
+      key,
+      harness: "antigravity",
+      scope: key === "global" ? "global" : key.startsWith("workspace:") ? "workspace" : "",
+      label: rowLabel(key, "antigravity"),
+      path: key === "disabled" ? "" : rowPath(key, rowHooks, ctx, "antigravity"),
+      editable: own,
+      disabled: key === "disabled",
+      file: own ? rowPath(key, rowHooks, ctx, "antigravity") : "",
+      hooks: rowHooks,
+    };
+  });
 }
 
 function rowDefs(harness, hooks, ctx) {
@@ -109,6 +149,7 @@ function rowDefs(harness, hooks, ctx) {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(hook);
   }
+  if (harness === "antigravity") return antigravityRows(groups, ctx);
   const claude = harness === "claude-code";
   const keys = [];
   const hidden = hiddenOf(ctx);
@@ -157,6 +198,70 @@ function viewOf(hook, role, position, state) {
   return clone;
 }
 
+function antigravityCell(row, event, ctx, state, index) {
+  const result = { frame: null, natives: [], groups: [], count: 0, specs: [] };
+  const raw = row.hooks.filter((hook) => hook.event === event);
+  let frame = null;
+  let groups = [];
+  let drafted = state.antigravity.drafted;
+  if (row.editable && row.file) {
+    const cell = state.antigravity.cells.get(`${row.file}|${event}`);
+    if (cell) {
+      frame = cell.frame;
+      groups = cell.groups;
+    }
+  } else {
+    for (const hook of raw) {
+      let group = groups.find((item) => item.name === hook.hook_name);
+      if (!group) {
+        group = { name: hook.hook_name, hooks: [] };
+        groups.push(group);
+      }
+      group.hooks.push(hook);
+    }
+  }
+  const make = (hook, member, position, ordered) => {
+    const view = { ...hook };
+    view.status = member ? `member#${position}` : hook.status === "member" ? "active" : hook.status;
+    return {
+      hook: view,
+      original: hook,
+      ctx,
+      index,
+      density: ctx.density,
+      member,
+      ordered,
+      pinned: isPinned(hook),
+      position,
+      drafted: drafted.has(hook.id),
+      draggable: !ctx.readOnly && row.editable && agOrderable(hook),
+      selected: false,
+      dim: hook.status === "disabled" || hook.status === "disabled-plugin" || hook.status === "file-skipped",
+    };
+  };
+  if (frame && frame.length) {
+    result.frame = {
+      scope: row.scope,
+      event,
+      spec: "ordonnateur",
+      ids: frame.map((hook) => hook.id),
+      cards: frame.map((hook, i) => make(hook, true, i + 1, true)),
+    };
+    result.count += frame.length;
+    if (frame.some(agRuns)) result.specs.push("ordonnateur");
+  }
+  for (const group of groups) {
+    if (!group.hooks.length) continue;
+    result.groups.push({
+      name: group.name,
+      cards: group.hooks.map((hook, i) => make(hook, false, i + 1, group.hooks.length >= 2)),
+    });
+    result.count += group.hooks.length;
+    if (group.hooks.some(agRuns)) result.specs.push(group.name === null ? "released" : group.name);
+  }
+  return result;
+}
+
 function cellContent(row, event, ctx, state, index, expanded) {
   const result = { frame: null, natives: [] };
   if (row.disabled && !expanded) return result;
@@ -180,6 +285,7 @@ function cellContent(row, event, ctx, state, index, expanded) {
     }));
     return result;
   }
+  if (row.harness === "antigravity") return antigravityCell(row, event, ctx, state, index);
   const make = (hook, role, position) => ({
     hook: viewOf(hook, role, position, state),
     original: hook,
@@ -472,7 +578,7 @@ class OdMatrix extends HTMLElement {
       const state = document.createElement("od-state");
       state.setAttribute("kind", "empty_first_run");
       state.setAttribute("heading", "No hooks are configured");
-      state.setAttribute("body", "None of Claude Code, Codex or Hermes has a hook in the files ordonnateur reads.");
+      state.setAttribute("body", "None of Claude Code, Codex, Hermes or Antigravity has a hook in the files ordonnateur reads.");
       const command = document.createElement("od-command");
       command.setAttribute("command", "ordonnateur list");
       state.append(command);
@@ -493,6 +599,7 @@ class OdMatrix extends HTMLElement {
     }
     const state = projectDraft(ctx.layout, ctx.project);
     state.hermes = projectHermes(ctx.layout, ctx.project);
+    state.antigravity = projectAntigravity(ctx.layout, ctx.project);
     const index = findingIndex(ctx.layout);
     for (const table of this.tables) table.remove();
     this.tables = [];
@@ -561,8 +668,22 @@ class OdMatrix extends HTMLElement {
         content.set(`${row.key}|${event}`, cell);
         if (!row.disabled) {
           const total = totals.get(event);
-          total.natives += cell.natives.length;
-          if (cell.frame) total.frames += 1;
+          total.natives += harness === "antigravity" ? cell.count || 0 : cell.natives.length;
+          if (cell.frame && harness !== "antigravity") total.frames += 1;
+        }
+      }
+    }
+    if (harness === "antigravity") {
+      for (const event of events) {
+        const specs = new Set();
+        for (const row of rows) {
+          if (row.disabled) continue;
+          for (const spec of content.get(`${row.key}|${event}`).specs || []) specs.add(`${row.key}|${spec}`);
+        }
+        if (specs.size < 2) continue;
+        for (const row of rows) {
+          const cell = content.get(`${row.key}|${event}`);
+          if (cell.specs && cell.specs.length) cell.varies = true;
         }
       }
     }
@@ -597,9 +718,9 @@ class OdMatrix extends HTMLElement {
       }
       const total = totals.get(event);
       const summary =
-        harness === "hermes"
+        harness === "hermes" || harness === "antigravity"
           ? total.natives
-            ? `${total.natives} ${total.natives === 1 ? "hook" : "hooks"} in order`
+            ? `${total.natives} ${total.natives === 1 ? "hook" : "hooks"}${harness === "hermes" ? " in order" : ""}`
             : "No hooks"
           : summaryText(total.natives, total.frames);
       th.append(line, el("span", "od-colsummary", summary));
@@ -618,7 +739,11 @@ class OdMatrix extends HTMLElement {
     tr.dataset.row = row.key;
     const head = el("th", "od-rowhead");
     head.scope = "row";
-    const name = el("span", "od-rowname", row.label);
+    const name = el("span", "od-rowname");
+    row.label.split(/(?<=@| · )/).forEach((part, i) => {
+      if (i) name.append(document.createElement("wbr"));
+      name.append(document.createTextNode(part));
+    });
     name.title = row.label;
     name.setAttribute("aria-label", row.label);
     const top = el("span", "od-rowline");
@@ -640,7 +765,9 @@ class OdMatrix extends HTMLElement {
       top.append(chip);
     } else if (!row.disabled) {
       const lock = el("span", "od-readonly");
-      lock.append(glyph("lock", "od-icon od-icon-sm"), el("span", "visually-hidden", "Read-only"));
+      lock.setAttribute("role", "img");
+      lock.setAttribute("aria-label", "Read-only");
+      lock.append(glyph("lock", "od-icon od-icon-sm"));
       top.append(lock);
     }
     head.append(top);
@@ -670,13 +797,25 @@ class OdMatrix extends HTMLElement {
       td.dataset.event = event;
       td.dataset.scope = row.scope;
       td.dataset.editable = row.editable ? "true" : "false";
+      if (row.harness === "antigravity" && row.file) td.dataset.file = row.file;
       const inner = el("div", "od-cell-inner");
       const cell = content.get(`${row.key}|${event}`);
+      if (cell.varies) {
+        const text = "Antigravity runs these hook specs in an order that changes every session";
+        const mark = el("span", "od-findings od-ag-order");
+        mark.dataset.severity = "warn";
+        mark.tabIndex = 0;
+        mark.setAttribute("role", "img");
+        mark.setAttribute("aria-label", text);
+        mark.append(glyph("warn"), el("span", "od-ag-order-text", "Order varies"));
+        inner.append(tipped(mark, text));
+      }
       if (cell.frame) {
         const frame = document.createElement("od-sequence");
         frame.model = {
           scope: cell.frame.scope,
           event,
+          spec: cell.frame.spec,
           ids: cell.frame.ids,
           stop: cell.frame.stop,
           editable: row.editable,
@@ -691,6 +830,15 @@ class OdMatrix extends HTMLElement {
           frame.dataset.shape = source.shape;
         }
         inner.append(frame);
+      }
+      for (const group of cell.groups || []) {
+        const wrap = el("div", "od-spec-group");
+        wrap.dataset.spec = group.name === null ? "" : group.name;
+        wrap.append(el("div", "od-spec-head mono", group.name === null ? "released" : group.name));
+        const list = el("div", "od-spec-list");
+        list.append(...group.cards.map((model) => this.makeCard(model)));
+        wrap.append(list);
+        inner.append(wrap);
       }
       for (const model of cell.natives) inner.append(this.makeCard(model));
       td.append(inner);
@@ -820,6 +968,9 @@ class OdMatrix extends HTMLElement {
       event: td.dataset.event,
       scope: td.dataset.scope,
       cell: td,
+      file: td.dataset.file || "",
+      spec: hook.hook_name || "",
+      units: isAntigravity(hook) ? agUnits(this.ctx.layout, this.ctx.project, hook) : null,
     };
   }
 
@@ -857,6 +1008,15 @@ class OdMatrix extends HTMLElement {
 
   addSlots(source) {
     const ctx = this.ctx;
+    if (source.harness === "antigravity") {
+      if (source.member || source.cell.dataset.editable !== "true" || source.cell.querySelector("od-sequence")) return;
+      if (!agOrderable(source.hook)) return;
+      const slot = el("div", "od-seq-slot");
+      slot.append(el("span", "od-seq-label", "Drop to sequence"));
+      source.cell.querySelector(".od-cell-inner").prepend(slot);
+      this.dragging.slots.push(slot);
+      return;
+    }
     if (source.harness === "hermes" || source.member || !source.cell || source.cell.dataset.editable !== "true") return;
     const sequenceable = (ctx.config.sequenceable || []).includes(source.event);
     if (!sequenceable || !source.hook.absorbable || source.hook.guard) return;
@@ -890,7 +1050,8 @@ class OdMatrix extends HTMLElement {
       if (over && over.dataset.pinned === "true") return { ok: false, reason: "Pinned hooks keep their place" };
       return { ok: true, action: "hermes", td };
     }
-    if (info.harness === "hermes") return { ok: false, reason: "Sequences stay inside one settings file" };
+    if (source.harness === "antigravity") return this.antigravityVerdict(source, td, frame, stack);
+    if (info.harness === "hermes" || info.harness === "antigravity") return { ok: false, reason: "Sequences stay inside one settings file" };
     if (info.harness === "codex") return { ok: false, reason: "Codex is read-only" };
     if (info.row !== source.row) return { ok: false, reason: "Sequences stay inside one settings file" };
     if (info.event !== source.event) return { ok: false, reason: "Hooks stay on their own event" };
@@ -907,9 +1068,38 @@ class OdMatrix extends HTMLElement {
     return { ok: true, action: "none" };
   }
 
+  antigravityVerdict(source, td, frame, stack) {
+    const info = td.dataset;
+    if (info.harness !== "antigravity") return { ok: false, reason: "Hooks stay in their own file" };
+    if (info.editable !== "true") return { ok: false, reason: "Plugin hooks are read-only" };
+    if (info.file !== source.file) return { ok: false, reason: "Hooks stay in their own file" };
+    if (info.event !== source.event) return { ok: false, reason: "Hooks stay on their own event" };
+    const over = stack.map((node) => node.closest && node.closest(".od-card")).find((node) => node && td.contains(node));
+    if (over && over.dataset.pinned === "true") return { ok: false, reason: "Pinned hooks keep their place" };
+    const hook = source.hook;
+    const cell = projectAntigravity(this.ctx.layout, this.ctx.project).cells.get(`${source.file}|${source.event}`);
+    const frameIds = cell && cell.frame ? cell.frame.map((item) => item.id) : [];
+    if (source.member) {
+      if (frame) return { ok: true, action: "reorder", list: frame.list };
+      return { ok: true, action: "release", td };
+    }
+    const slotHit = stack.map((node) => node.closest && node.closest(".od-seq-slot")).find((node) => node && td.contains(node));
+    if (frame || slotHit) {
+      const reason = agSequenceReason(this.ctx.layout, this.ctx.project, hook, frameIds.concat(hook.id));
+      if (reason) return { ok: false, reason };
+      return { ok: true, action: "sequence", list: frame ? frame.list : slotHit };
+    }
+    const group = stack.map((node) => node.closest && node.closest(".od-spec-group")).find((node) => node && td.contains(node) && node.dataset.spec === source.spec);
+    if (group && source.units && source.units.kind === "group") {
+      if (source.units.reason) return { ok: false, reason: source.units.reason };
+      return { ok: true, action: "group", list: group.querySelector(".od-spec-list") };
+    }
+    return { ok: true, action: "none" };
+  }
+
   insertionIndex(list, y) {
     const d = this.dragging;
-    const cards = [...list.children].filter((node) => node.tagName === "OD-HOOK-CARD" && node !== d.source.host);
+    const cards = [...list.children].filter((node) => node.tagName === "OD-HOOK-CARD" && node !== d.source.host && !(node.model && node.model.pinned));
     let at = 0;
     for (const card of cards) {
       const box = card.getBoundingClientRect();
@@ -970,7 +1160,7 @@ class OdMatrix extends HTMLElement {
     if (verdict.action === "hermes") {
       d.at = this.hermesIndex(event.clientY);
       this.arrangeHermes(d.at);
-    } else if (verdict.action === "reorder" || verdict.action === "sequence") {
+    } else if (verdict.action === "reorder" || verdict.action === "sequence" || verdict.action === "group") {
       const { at, cards } = this.insertionIndex(verdict.list, event.clientY);
       d.at = at;
       const before = cards[at] || null;
@@ -1016,6 +1206,39 @@ class OdMatrix extends HTMLElement {
     }
   }
 
+  finishAntigravity(verdict, source, at, hook, ctx) {
+    const cell = projectAntigravity(ctx.layout, ctx.project).cells.get(`${source.file}|${source.event}`);
+    const frameIds = cell && cell.frame ? cell.frame.map((item) => item.id) : [];
+    const place = (list) => Math.min(at == null ? list.length : at, list.length);
+    if (verdict.action === "group") {
+      const units = agUnits(ctx.layout, ctx.project, hook);
+      if (!units || units.kind !== "group") return false;
+      const next = units.ids.filter((id) => id !== hook.id);
+      next.splice(place(next), 0, hook.id);
+      if (next.join("|") === units.ids.join("|")) return false;
+      this.settle = hook.id;
+      return commitAntigravity(hook, ctx, "group", next);
+    }
+    if (verdict.action === "reorder") {
+      const next = frameIds.filter((id) => id !== hook.id);
+      next.splice(place(next), 0, hook.id);
+      if (next.join("|") === frameIds.join("|")) return false;
+      this.settle = hook.id;
+      return commitAntigravity(hook, ctx, "frame", next);
+    }
+    if (verdict.action === "sequence") {
+      const next = frameIds.slice();
+      next.splice(place(next), 0, hook.id);
+      this.settle = hook.id;
+      return commitAntigravity(hook, ctx, "sequence", next);
+    }
+    if (verdict.action === "release") {
+      this.settle = hook.id;
+      return commitAntigravity(hook, ctx, "release", frameIds.filter((id) => id !== hook.id));
+    }
+    return false;
+  }
+
   finishDrag(event) {
     const d = this.dragging;
     const verdict = d.verdict;
@@ -1030,7 +1253,9 @@ class OdMatrix extends HTMLElement {
     const base = projectDraft(ctx.layout, ctx.project);
     const ids = (base.members.get(`${source.scope}|${source.event}`) || []).map((member) => member.id);
     let changed = false;
-    if (verdict.ok && verdict.action === "hermes") {
+    if (verdict.ok && source.harness === "antigravity") {
+      changed = this.finishAntigravity(verdict, source, at, hook, ctx);
+    } else if (verdict.ok && verdict.action === "hermes") {
       const state = projectHermes(ctx.layout, ctx.project);
       const ids = (state.orders.get(source.event) || []).filter((item) => !isPinned(item)).map((item) => item.id);
       const next = ids.filter((id) => id !== hook.id);

@@ -239,6 +239,24 @@ col.od-col-timeout {
   box-shadow: inset calc(var(--rail-w) * 2) 0 0 var(--src);
 }
 
+.od-list .od-row[data-hot] {
+  outline: var(--border-w) solid var(--src);
+  outline-offset: calc(-1 * var(--border-w));
+}
+
+.od-row[data-hot] td {
+  background: linear-gradient(var(--src-soft-hover), var(--src-soft-hover)), var(--surface);
+}
+
+.od-row[data-hot] td:first-child {
+  box-shadow: inset calc(var(--rail-w) * 2) 0 0 var(--src);
+}
+
+.od-row[data-hot] .od-source-text,
+.od-row[data-hot] .od-program {
+  color: var(--text);
+}
+
 .od-row td.od-col-source {
   display: table-cell;
 }

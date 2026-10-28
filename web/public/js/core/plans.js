@@ -3,6 +3,15 @@ import * as draft from "./draft.js";
 
 export function planRequest(scope, project) {
   const hermes = draft.isHermesScope(scope);
+  if (draft.isAntigravityScope(scope)) {
+    const kind = draft.parseAntigravityScope(scope).kind;
+    return {
+      scope: kind,
+      project: kind === "workspace" ? project || null : null,
+      base: draft.baseOf(scope, project),
+      changes: draft.changes(scope, project),
+    };
+  }
   return {
     scope: hermes ? "user" : scope,
     project: hermes ? null : project || null,
@@ -29,6 +38,7 @@ export function shell() {
 
 export function scopeLabel(scope) {
   if (draft.isHermesScope(scope)) return "Hermes config";
+  if (draft.isAntigravityScope(scope)) return `Antigravity ${draft.parseAntigravityScope(scope).kind} hooks`;
   if (scope === "local") return "Local settings";
   if (scope === "user") return "User settings";
   return scope;

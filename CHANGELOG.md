@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.9] - 2026-10-27
+
+### Fixed
+
+- The release check runs `rplugin check` through a temporary link named after the plugin id, and the test
+  environment's deploy runs only `scripts/release.rb check`. Why: `rplugin check .` requires the plugin directory to
+  be named after the plugin's id, the test checkout is named `test`, and so the first test deploy of 0.2.8 failed.
+  0.2.8 was tagged but never published; 0.2.9 is the first published release that carries the 0.2.8 changes below.
+
+## [0.2.8] - 2026-10-27
+
+### Added
+
+- Antigravity support (the `agy` CLI, the IDE and the 2.0 app share one hook format, observed with agy 1.4.7):
+  `list`, `lint`, `fire` and `watch` read the global `~/.gemini/config/hooks.json`, every `.agents`, `.agent`,
+  `_agents` and `_agent` directory from the project up to the repository root, and the plugins under them with their
+  on/off state from `~/.gemini/config/config.json` (`RPLUGIN_ANTIGRAVITY_HOME` reads another home). Ids start with
+  `ag:`. Statuses are active, member, disabled, disabled-plugin, file-skipped, ignored-event and prompt. Why:
+  Antigravity runs hooks from five kinds of place, and a hook nobody can see cannot be ordered or trusted.
+- `order`, `move` and `release` take `--harness antigravity` (chosen automatically for `ag:` ids) with `--scope global`
+  or `--scope workspace --project DIR`, and `release --file PATH`. Hooks inside one hook spec are permuted in place;
+  hooks from several specs of one file are gathered into a spec named `ordonnateur`, and a ledger under ordonnateur's
+  state (`ordonnateur.antigravity-ledger/v1`) records where each came from so `release` puts each back at its index.
+  Every write goes through a plan (`AntigravityOrder`) with a policy judgment and a backup; plugin files are never
+  written. Why: Antigravity runs the array inside one spec in order but changes the order between specs and files
+  every session, so one spec is the only place an order holds; verified with three live agy sessions.
+- Lint codes ORD-AG-SKIPPED, NOTJSON, EVENT, MATCHER, CLAUDE-TOOL, NOHOOKS, MATCHER-IGNORED, RANDOM-ORDER, DISABLED,
+  TIMEOUT, DUPNAME, PROMPT and LEDGER, each with a fix that names `--project` and `--scope` where they apply. Why:
+  Antigravity skips a whole file for one wrong type, a trailing comma or a group on a flat event, without saying so.
+- `fire` builds Antigravity's camelCase payload and environment (`ANTIGRAVITY_CONVERSATION_ID`) and runs from the
+  hooks.json directory, as Antigravity does; `fire --event` refuses PreInvocation and PostInvocation. Why: a test-fire
+  that differs from the real run tests the wrong thing.
+- The web app shows Antigravity as its own table: Global hooks, each workspace file, each plugin and Disabled plugins.
+  Inside a cell the hooks group by hook spec, the `ordonnateur` spec is a numbered frame, and a cell with hooks from two
+  or more specs is marked as running in an order that changes every session. Drag inside a spec, or Move up and Move
+  down, reorders it in place on one click; gathering a hook into the `ordonnateur` spec (`s`) or releasing it (`r`)
+  needs the plan id typed. Plugin rows are read-only. Why: the user asked for full reorder in the web, built through
+  the same `AntigravityOrder` plans as the command line.
+- Releases are tagged `vX.Y.Z` on GitHub, so `rplugin install <clone> --ref v0.2.8` pins one read-only. Why: no
+  public release carried a tag, so nobody could pin or roll back to a version.
+- Releases go through polispec environment control (`specs/polispec/environments.yml`): main is development, a
+  promotion to test tags the release and checks it in its own checkout (`rplugin check`, then `scripts/release.rb
+  check`, which compares `ordonnateur version` with `VERSION` and runs lint for every harness), and only the operator
+  promotes to stable. The stable deploy pins the tag on the host (`rplugin install . --ref vX.Y.Z`, then `rplugin
+  doctor`), refreshes the Antigravity copy when Antigravity lists ordonnateur, and publishes the tag's tree to the
+  manifest's GitHub remote as one commit and tag (`scripts/release.rb publish`), refusing an untagged or dirty
+  checkout and a tag GitHub already holds with a different tree; `ORDONNATEUR_PUBLISH_DISABLED=1` stops it. Why: a
+  release was copied to GitHub by hand from a working tree that held another session's uncommitted work, nothing
+  checked it first, and the host ran the development tree instead of a release.
+- `.gitattributes` marks `.rproject`, `.agents/directives`, `FEATURES.md`, `scripts`, `specs/implementation` and
+  `specs/polispec` export-ignore, so `git archive` of a tag is the public tree. Why: the exclusion list was retyped by
+  hand for each publication.
+
+### Changed
+
+- `--harness` accepts `antigravity`, and the invalid-harness message names claude-code, hermes and antigravity.
+  `guard`, `unguard` and `card` refuse `ag:` hooks. Why: Antigravity has no card and no guard list.
+- The map's Read-only marker carries its name as `role="img"` with an `aria-label` instead of clipped hidden text.
+  Why: the ratelier render audit flagged the clipped text (LAY-24) once Antigravity's plugin rows showed the marker.
+- An applied Antigravity plan emits `ordonnateur.card.applied` with `harness: antigravity`, its scope and mode, one
+  event per event it changed or released. Why: rLogs records every order change, whichever harness it went to.
+
+### Fixed
+
+- A Claude Code source switched off in the source bar now hides every one of its rows in the list: `projected()` in
+  `od-list.js` re-added the members and natives of the user and local scopes from the full layout. Why: with User
+  settings off, its sequenced members still showed in the list, against `specs/web.yml`, which already promised the
+  fix.
+- Hovering or focusing a source button marks that source's list rows (`data-hot`, a `--src` outline and tint in every
+  theme), as it already did for map cards. Why: the list gave no way to see which rows a source owned.
+- Map row names wrap instead of ending in an ellipsis, breaking first after `@` and ` · `. Why: long plugin ids such
+  as `harness-memory@harness-memory` were cut off at the row header's width.
+
 ## [0.2.7] - 2026-10-26
 
 ### Added

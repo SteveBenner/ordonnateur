@@ -6,7 +6,7 @@ import "./od-command.js";
 import * as draft from "../core/draft.js";
 import { announce } from "../core/announce.js";
 import { nextSort, readSort, saveSort, sortRows } from "../core/sort.js";
-import { providerKey, providerMeta } from "../core/sources.js";
+import { providerKey, providerMeta, rowKeyOfHook } from "../core/sources.js";
 import {
   HARNESS_LABELS,
   allHooks,
@@ -111,6 +111,7 @@ function hookRow(hook, index, context, drafted, position) {
   const row = el("tr", "od-row");
   if (drafted) row.dataset.drafted = "true";
   row.dataset.hookId = hook.id;
+  row.dataset.provider = providerKey(hook);
   const source = providerMeta(providerKey(hook));
   row.dataset.src = String(source.color);
   row.dataset.shape = source.shape;
@@ -240,7 +241,7 @@ function eventHead(event, hooks, context, harness) {
 
 const DRAFT_SCOPES = ["user", "local"];
 
-function projected(hooks, event, projection) {
+function projected(hooks, event, projection, hidden) {
   const rest = [];
   for (const hook of hooks) {
     const own = hook.harness === "claude-code" && DRAFT_SCOPES.includes(hook.scope) && !hook.plugin;
@@ -248,6 +249,7 @@ function projected(hooks, event, projection) {
   }
   const out = rest.slice();
   for (const scope of DRAFT_SCOPES) {
+    if (hidden.has(`claude-code:${scope}`)) continue;
     const key = `${scope}|${event}`;
     const members = projection.members.get(key);
     if (!members) continue;
@@ -263,6 +265,38 @@ function adjust(hook, projection) {
   if (!projection.guards.has(hook.id) || isMember(hook)) return hook;
   if (projection.guards.get(hook.id)) return { ...hook, status: "guard" };
   return hook.status === "guard" ? { ...hook, status: "native" } : hook;
+}
+
+function antigravityEntries(raw, event, projection) {
+  const keys = [];
+  for (const hook of raw) {
+    const key = rowKeyOfHook(hook);
+    if (!keys.includes(key)) keys.push(key);
+  }
+  const rank = (key) => (key === "global" ? 0 : key.startsWith("workspace:") ? 1 : key.startsWith("plugin:") ? 2 : 3);
+  keys.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+  const entries = [];
+  for (const key of keys) {
+    const own = raw.filter((hook) => rowKeyOfHook(hook) === key);
+    const file = own[0].source_file;
+    const cell = key === "global" || key.startsWith("workspace:") ? projection.antigravity.cells.get(`${file}|${event}`) : null;
+    if (cell) {
+      (cell.frame || []).forEach((hook, i) => entries.push({ hook, position: i + 1 }));
+      for (const group of cell.groups) {
+        group.hooks.forEach((hook, i) => entries.push({ hook: hook.status === "member" ? { ...hook, status: "active" } : hook, position: group.hooks.length >= 2 ? i + 1 : 0 }));
+      }
+      continue;
+    }
+    const sizes = new Map();
+    for (const hook of own) sizes.set(hook.hook_name, (sizes.get(hook.hook_name) || 0) + 1);
+    const seen = new Map();
+    for (const hook of own) {
+      const at = (seen.get(hook.hook_name) || 0) + 1;
+      seen.set(hook.hook_name, at);
+      entries.push({ hook, position: sizes.get(hook.hook_name) >= 2 ? at : 0 });
+    }
+  }
+  return entries;
 }
 
 function columnName(column) {
@@ -284,7 +318,7 @@ function sortButton(column, dir) {
   return button;
 }
 
-function table(harness, hooks, context, index, projection, sort) {
+function table(harness, hooks, context, index, projection, sort, hidden) {
   const wrap = el("section", "od-list-section");
   const element = el("table", "od-list");
   const caption = el("caption", "od-caption", HARNESS_LABELS[harness] || harness);
@@ -327,17 +361,24 @@ function table(harness, hooks, context, index, projection, sort) {
   for (const event of order) {
     const raw = byEvent.get(event) || [];
     let list;
+    let agEntries = null;
     if (harness === "hermes") list = (projection.hermes.orders.get(event) || raw).slice();
-    else list = (harness === "claude-code" ? projected(raw, event, projection) : raw).slice().sort(compareSources);
+    else if (harness === "antigravity") {
+      agEntries = antigravityEntries(raw, event, projection);
+      list = agEntries.map((entry) => entry.hook);
+    }
+    else list = (harness === "claude-code" ? projected(raw, event, projection, hidden) : raw).slice().sort(compareSources);
     if (!list.length && !context.showEmpty) continue;
     const body = eventHead(event, list, context, harness);
-    const entries = list.map((hook, position) => ({
-      hook,
-      position: harness === "hermes" && list.length >= 2 ? position + 1 : 0,
-    }));
+    const entries =
+      agEntries ||
+      list.map((hook, position) => ({
+        hook,
+        position: harness === "hermes" && list.length >= 2 ? position + 1 : 0,
+      }));
     for (const entry of sortRows(entries, sort, index)) {
       const hook = entry.hook;
-      const drafted = projection.drafted.has(hook.id) || (harness === "hermes" && projection.hermes.drafted.has(hook.id));
+      const drafted = projection.drafted.has(hook.id) || (harness === "hermes" && projection.hermes.drafted.has(hook.id)) || (harness === "antigravity" && projection.antigravity.drafted.has(hook.id));
       body.append(hookRow(hook, index, context, drafted, entry.position));
     }
     element.append(body);
@@ -379,6 +420,8 @@ class OdListView extends HTMLElement {
     document.addEventListener("od-layout-reloaded", this.onDraft);
     document.addEventListener("od-hook-select", this.onSelect);
     document.addEventListener("od-sources-change", this.onSources);
+    this.onHover = (event) => this.hotSource(event.detail && event.detail.key);
+    document.addEventListener("od-sources-hover", this.onHover);
     const main = this.closest(".od-main");
     if (main && typeof MutationObserver === "function") {
       this.watcher = new MutationObserver(() => {
@@ -420,6 +463,15 @@ class OdListView extends HTMLElement {
     }
   }
 
+  hotSource(key) {
+    this.hotKey = key || null;
+    if (!this.region) return;
+    for (const row of this.region.querySelectorAll(".od-row")) {
+      if (this.hotKey && row.dataset.provider === this.hotKey) row.dataset.hot = "true";
+      else row.removeAttribute("data-hot");
+    }
+  }
+
   markSelected() {
     if (!this.region) return;
     for (const row of this.region.querySelectorAll(".od-row")) {
@@ -433,6 +485,7 @@ class OdListView extends HTMLElement {
     document.removeEventListener("od-layout-reloaded", this.onDraft);
     document.removeEventListener("od-hook-select", this.onSelect);
     document.removeEventListener("od-sources-change", this.onSources);
+    document.removeEventListener("od-sources-hover", this.onHover);
     if (this.watcher) this.watcher.disconnect();
     this.watcher = null;
     if (this.resizer) this.resizer.disconnect();
@@ -446,19 +499,20 @@ class OdListView extends HTMLElement {
     const index = findingIndex(context.layout);
     const projection = draft.project(context.layout, context.project);
     projection.hermes = draft.projectHermes(context.layout, context.project);
+    projection.antigravity = draft.projectAntigravity(context.layout, context.project);
     const sections = [];
     const sources = context.sources;
     const hidden = (sources && sources.hidden) || new Set();
     for (const harness of harnessesFor(context.harness)) {
       const hooks = visibleHooks(context.layout, harness, hidden);
-      sections.push(table(harness, hooks, context, index, projection, this.sort));
+      sections.push(table(harness, hooks, context, index, projection, this.sort, hidden));
     }
     const everything = allHooks(context.layout, "both");
     if (!everything.length) {
       const state = document.createElement("od-state");
       state.setAttribute("kind", "empty_first_run");
       state.setAttribute("heading", "No hooks are configured");
-      state.setAttribute("body", "None of Claude Code, Codex or Hermes has a hook in the files ordonnateur reads.");
+      state.setAttribute("body", "None of Claude Code, Codex, Hermes or Antigravity has a hook in the files ordonnateur reads.");
       const command = document.createElement("od-command");
       command.setAttribute("command", "ordonnateur list");
       state.append(command);
@@ -477,6 +531,7 @@ class OdListView extends HTMLElement {
     }
     this.region.replaceChildren(...sections);
     this.markSelected();
+    this.hotSource(this.hotKey);
     fitMiddle(this.region);
   }
 }

@@ -326,8 +326,9 @@ module Ordonnateur
           "policy_source" => policy_source,
           "folder_picker" => folder_picker_description,
           "discover" => @ctx.settings.on?("web.discover"),
-          "events" => { "claude-code" => LIFECYCLE["claude-code"], "codex" => LIFECYCLE["codex"], "hermes" => Model::HERMES_EVENTS },
+          "events" => { "claude-code" => LIFECYCLE["claude-code"], "codex" => LIFECYCLE["codex"], "hermes" => Model::HERMES_EVENTS, "antigravity" => Model::ANTIGRAVITY_EVENTS },
           "hermes" => { "tool_events" => Model::HERMES_TOOL_EVENTS, "blocking_events" => Model::HERMES_BLOCKING_EVENTS },
+          "antigravity" => { "tool_events" => Model::ANTIGRAVITY_TOOL_EVENTS, "member_spec" => Model::ANTIGRAVITY_MEMBER_SPEC },
           "sequenceable" => LIFECYCLE["claude-code"].select { |event| Model::SEQUENCEABLE_EVENTS.include?(event) },
           "not_sequenceable" => LIFECYCLE["claude-code"].select { |event| refused.include?(event) }
                                                         .to_h { |event| [event, Model.refused_reason(event)] },

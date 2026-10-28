@@ -1,13 +1,32 @@
 import { announce } from "./announce.js";
-import { hermesEvents, isDispatcher, isHermes, isMember, isPinned, memberPosition } from "./hooks.js";
+import { agOrderable, agWritable, draftScopes, hermesEvents, isDispatcher, isHermes, isMember, isPinned, memberPosition } from "./hooks.js";
 
 const PREFIX = "ordonnateur.web.draft.";
 const SCOPES = ["user", "local"];
 export const HERMES_SCOPE = "hermes.user";
 const ALL_SCOPES = [...SCOPES, HERMES_SCOPE];
+const AG_PREFIX = "antigravity.";
 
 export function isHermesScope(scope) {
   return scope === HERMES_SCOPE;
+}
+
+export function isAntigravityScope(scope) {
+  return typeof scope === "string" && scope.startsWith(AG_PREFIX);
+}
+
+export function antigravityScope(kind, path) {
+  return `${AG_PREFIX}${kind}.${path}`;
+}
+
+export function parseAntigravityScope(scope) {
+  const rest = String(scope).slice(AG_PREFIX.length);
+  const at = rest.indexOf(".");
+  return { kind: rest.slice(0, at), path: rest.slice(at + 1) };
+}
+
+export function antigravityScopes(project) {
+  return draftScopes(project).filter(isAntigravityScope);
 }
 
 export function draftKey(scope, project) {
@@ -84,6 +103,22 @@ export function setHermesOrder(project, base, event, ids, original) {
   store(HERMES_SCOPE, project, draft);
 }
 
+export function setAgOrder(scope, project, base, event, ids, original, mode, spec) {
+  const draft = load(scope, project) || blank(base);
+  if (!draft.base) draft.base = base || null;
+  if (sameList(ids, original || [])) delete draft.events[event];
+  else draft.events[event] = { op: "order", mode, spec: spec || null, hooks: ids.slice(), original: (original || []).slice() };
+  store(scope, project, draft);
+}
+
+export function setAgRelease(scope, project, base, event, original) {
+  const draft = load(scope, project) || blank(base);
+  if (!draft.base) draft.base = base || null;
+  if (!(original || []).length) delete draft.events[event];
+  else draft.events[event] = { op: "release", mode: "members", spec: null, original: original.slice() };
+  store(scope, project, draft);
+}
+
 export function setOrder(scope, project, base, event, ids, stopOnBlock = null, original, originalStop) {
   const draft = load(scope, project) || blank(base);
   if (!draft.base) draft.base = base || null;
@@ -144,6 +179,13 @@ export function changes(scope, project) {
     for (const [event, entry] of Object.entries(draft.events)) list.push({ op: "order", event, hooks: entry.hooks.slice() });
     return list;
   }
+  if (isAntigravityScope(scope)) {
+    for (const [event, entry] of Object.entries(draft.events)) {
+      if (entry.op === "release") list.push({ op: "release", event });
+      else list.push({ op: "order", event, hooks: entry.hooks.slice() });
+    }
+    return list;
+  }
   for (const [event, entry] of Object.entries(draft.events)) {
     if (entry.op === "release") list.push({ op: "release", event });
     else {
@@ -158,16 +200,46 @@ export function changes(scope, project) {
 
 export function scopesWithChanges(project) {
   const found = [];
-  for (const scope of ALL_SCOPES) {
+  for (const scope of [...ALL_SCOPES, ...antigravityScopes(project)]) {
     const total = count(scope, project);
     if (total > 0) found.push({ scope, project: project || null, count: total });
   }
   return found;
 }
 
+function agDraftValid(entry, known) {
+  if (entry.op !== "order") return true;
+  entry.hooks = entry.hooks.filter((id) => known.has(id));
+  entry.original = (entry.original || []).filter((id) => known.has(id));
+  return entry.hooks.length > 0 && !sameList(entry.hooks, entry.original);
+}
+
+function rebaseAntigravity(project, layout, fingerprint) {
+  const hooks = (layout && layout.hooks) || [];
+  const known = new Set(hooks.filter(agOrderable).map((hook) => hook.id));
+  const dropped = [];
+  for (const scope of antigravityScopes(project)) {
+    const draft = load(scope, project);
+    if (!draft) continue;
+    const { path } = parseAntigravityScope(scope);
+    for (const [event, entry] of Object.entries(draft.events)) {
+      if (entry.op === "order") for (const id of entry.hooks) if (!known.has(id)) dropped.push(id);
+      const members = hooks.filter((hook) => agWritable(hook) && hook.source_file === path && hook.event === event && hook.member === true);
+      const keep = entry.op === "release" ? members.length > 0 : agDraftValid(entry, known);
+      if (!keep) delete draft.events[event];
+    }
+    draft.base = fingerprint;
+    store(scope, project, draft);
+  }
+  if (dropped.length) {
+    announce(`${dropped.length === 1 ? "A drafted hook is" : `${dropped.length} drafted hooks are`} no longer in the layout and ${dropped.length === 1 ? "was" : "were"} dropped from the draft.`);
+  }
+}
+
 export function rebase(project, layout) {
   const fingerprint = layout && layout.fingerprint ? layout.fingerprint.config : null;
   const known = new Set(((layout && layout.hooks) || []).map((hook) => hook.id));
+  rebaseAntigravity(project, layout, fingerprint);
   for (const scope of ALL_SCOPES) {
     const draft = load(scope, project);
     if (!draft) continue;
@@ -332,4 +404,146 @@ export function project(layout, projectRoot) {
     result.natives.set(key, natives.concat(returned));
   }
   return result;
+}
+
+function agBase(layout, file, event) {
+  const hooks = ((layout && layout.hooks) || []).filter((hook) => agWritable(hook) && hook.source_file === file && hook.event === event);
+  const members = hooks.filter((hook) => hook.member === true);
+  const groups = [];
+  for (const hook of hooks) {
+    if (hook.member === true) continue;
+    let group = groups.find((item) => item.name === hook.hook_name);
+    if (!group) {
+      group = { name: hook.hook_name, hooks: [] };
+      groups.push(group);
+    }
+    group.hooks.push(hook);
+  }
+  return { hooks, members, groups };
+}
+
+function agCell(base, entry, byId) {
+  const out = {
+    frame: base.members.length ? base.members.slice() : null,
+    groups: base.groups.map((group) => ({ name: group.name, hooks: group.hooks.slice() })),
+    drafted: new Set(),
+  };
+  if (!entry) return out;
+  if (entry.op === "release") {
+    out.frame = null;
+    if (base.members.length) out.groups.push({ name: null, hooks: base.members.slice() });
+    for (const hook of base.members) out.drafted.add(hook.id);
+    return out;
+  }
+  const named = entry.hooks.map((id) => byId.get(id)).filter(Boolean);
+  if (entry.mode === "inplace") {
+    const group = out.groups.find((item) => item.name === entry.spec);
+    if (!group) return out;
+    const slots = [];
+    group.hooks.forEach((hook, index) => {
+      if (entry.hooks.includes(hook.id)) slots.push(index);
+    });
+    if (slots.length !== named.length) return out;
+    const next = group.hooks.slice();
+    slots.forEach((slot, i) => {
+      next[slot] = named[i];
+      if (group.hooks[slot].id !== named[i].id) out.drafted.add(named[i].id);
+    });
+    group.hooks = next;
+    return out;
+  }
+  const inside = new Set(entry.hooks);
+  out.frame = named.length ? named : null;
+  out.groups = out.groups.map((group) => ({ name: group.name, hooks: group.hooks.filter((hook) => !inside.has(hook.id)) })).filter((group) => group.hooks.length);
+  const released = base.members.filter((hook) => !inside.has(hook.id));
+  if (released.length) {
+    out.groups.push({ name: null, hooks: released });
+    for (const hook of released) out.drafted.add(hook.id);
+  }
+  named.forEach((hook, index) => {
+    if (!base.members[index] || base.members[index].id !== hook.id) out.drafted.add(hook.id);
+  });
+  return out;
+}
+
+export function projectAntigravity(layout, projectRoot) {
+  const result = { cells: new Map(), drafted: new Set() };
+  const hooks = (layout && layout.hooks) || [];
+  const byId = new Map(hooks.map((hook) => [hook.id, hook]));
+  const drafts = new Map();
+  for (const scope of antigravityScopes(projectRoot)) {
+    const draft = load(scope, projectRoot);
+    if (draft) drafts.set(parseAntigravityScope(scope).path, { scope, draft });
+  }
+  const keys = new Set();
+  for (const hook of hooks) if (agWritable(hook)) keys.add(`${hook.source_file}|${hook.event}`);
+  for (const [file, item] of drafts) for (const event of Object.keys(item.draft.events)) keys.add(`${file}|${event}`);
+  for (const key of keys) {
+    const at = key.lastIndexOf("|");
+    const file = key.slice(0, at);
+    const event = key.slice(at + 1);
+    const base = agBase(layout, file, event);
+    const item = drafts.get(file);
+    const entry = item ? item.draft.events[event] || null : null;
+    const cell = agCell(base, entry, byId);
+    cell.base = base;
+    cell.entry = entry;
+    for (const id of cell.drafted) result.drafted.add(id);
+    result.cells.set(key, cell);
+  }
+  return result;
+}
+
+export const AG_CONFLICT = "This event already has a different change in the draft";
+export const AG_SEQUENCE_FIRST = "This event has a sequence; reorder inside it or release it first";
+export const AG_TWO_SPECS = "A sequence needs hooks from two different specs";
+
+function entryAllows(entry, mode, spec) {
+  if (!entry) return true;
+  if (entry.op === "release") return mode === "members";
+  return entry.mode === mode && (mode !== "inplace" || entry.spec === spec);
+}
+
+export function agUnits(layout, project, hook) {
+  if (!agOrderable(hook)) return null;
+  const cell = projectAntigravity(layout, project).cells.get(`${hook.source_file}|${hook.event}`);
+  if (!cell) return null;
+  if (cell.frame && cell.frame.some((item) => item.id === hook.id)) return { kind: "frame", cell, ids: cell.frame.map((item) => item.id), reason: null };
+  const group = cell.groups.find((item) => item.hooks.some((entry) => entry.id === hook.id));
+  if (!group || group.name === null) return null;
+  const ids = group.hooks.filter(agOrderable).map((item) => item.id);
+  if (ids.length < 2) return null;
+  let reason = null;
+  if (cell.base.members.length) reason = AG_SEQUENCE_FIRST;
+  else if (!entryAllows(cell.entry, "inplace", group.name)) reason = AG_CONFLICT;
+  return { kind: "group", cell, group, ids, reason };
+}
+
+export function agSequenceReason(layout, project, hook, ids) {
+  if (!agOrderable(hook)) return "This hook cannot be sequenced";
+  const cell = projectAntigravity(layout, project).cells.get(`${hook.source_file}|${hook.event}`);
+  if (!cell) return "This hook cannot be sequenced";
+  if (!entryAllows(cell.entry, "members")) return AG_CONFLICT;
+  if (!cell.base.members.length && ids.length >= 2) {
+    const specs = new Set(ids.map((id) => (cell.base.hooks.find((item) => item.id === id) || {}).hook_name));
+    if (specs.size === 1) return AG_TWO_SPECS;
+  }
+  return null;
+}
+
+export function agCommit(layout, project, hook, kind, ids) {
+  const cell = projectAntigravity(layout, project).cells.get(`${hook.source_file}|${hook.event}`);
+  if (!cell) return false;
+  const scope = antigravityScope(hook.scope, hook.source_file);
+  const base = layout && layout.fingerprint ? layout.fingerprint.config : null;
+  const original = cell.base.members.map((item) => item.id);
+  if (kind === "group") {
+    const group = cell.base.groups.find((item) => item.name === hook.hook_name);
+    const first = group ? group.hooks.filter(agOrderable).map((item) => item.id) : [];
+    setAgOrder(scope, project, base, hook.event, ids, first, "inplace", hook.hook_name);
+    return true;
+  }
+  if (ids.length < 2 && original.length > 0) setAgRelease(scope, project, base, hook.event, original);
+  else setAgOrder(scope, project, base, hook.event, ids, original, "members", null);
+  return true;
 }

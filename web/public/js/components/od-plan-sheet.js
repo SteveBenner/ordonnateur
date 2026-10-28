@@ -426,7 +426,9 @@ class OdPlanSheet extends HTMLElement {
       "body",
       draft.isHermesScope(this.scope)
         ? "The hook order was written. Hermes applies it to new processes; a running gateway keeps its current order until restart."
-        : "The hook settings were written. Running Claude Code sessions pick the change up through their settings watcher.",
+        : draft.isAntigravityScope(this.scope)
+          ? `Applied to ${scopeLabel(this.scope).replace(/ hooks$/, "")} hooks. New sessions use this order.`
+          : "The hook settings were written. Running Claude Code sessions pick the change up through their settings watcher.",
     );
     wrap.append(state);
     for (const [label, paths] of [
@@ -633,7 +635,7 @@ class OdPlanSheet extends HTMLElement {
   }
 
   humanize(text) {
-    return String(text).replace(/\bhm:[A-Za-z0-9_.:-]*[A-Za-z0-9_]/g, (id) => this.programName(id));
+    return String(text).replace(/\b(?:hm|ag):[A-Za-z0-9_.:-]*[A-Za-z0-9_]/g, (id) => this.programName(id));
   }
 
   effect(plan) {

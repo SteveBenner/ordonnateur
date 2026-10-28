@@ -9,7 +9,7 @@ import { allowedActions, perform } from "./od-hook-menu.js";
 import { shell } from "../core/plans.js";
 import { announce } from "../core/announce.js";
 import { providerKey, providerMeta } from "../core/sources.js";
-import { HARNESS_LABELS, findingIndex, isHermes, isMember, isPinned, memberPosition, pinReason, program, statusOf } from "../core/hooks.js";
+import { HARNESS_LABELS, findingIndex, isAntigravity, isHermes, isMember, isPinned, memberPosition, pinReason, program, statusOf } from "../core/hooks.js";
 
 const WIDE = "(min-width: 1024px)";
 
@@ -222,7 +222,7 @@ class OdInspector extends HTMLElement {
     this.content.replaceChildren(
       this.identity(hook),
       this.command(hook),
-      this.settings(hook),
+      this.settings(hook, context),
       this.status(hook, context),
       this.findings(hook, context),
       this.timing(hook),
@@ -253,14 +253,14 @@ class OdInspector extends HTMLElement {
     dot.dataset.src = String(meta.color);
     dot.dataset.shape = meta.shape;
     source.append(dot, document.createTextNode(" "), path);
-    node.append(
-      rows([
-        ["Id", digest],
-        ["Harness", HARNESS_LABELS[hook.harness] || "Claude Code"],
-        ["Event", hook.event],
-        ["Source", source],
-      ]),
-    );
+    const pairs = [
+      ["Id", digest],
+      ["Harness", HARNESS_LABELS[hook.harness] || "Claude Code"],
+      ["Event", hook.event],
+    ];
+    if (isAntigravity(hook)) pairs.push(["Hook spec", hook.hook_name], ["File", source]);
+    else pairs.push(["Source", source]);
+    node.append(rows(pairs));
     return node;
   }
 
@@ -274,9 +274,25 @@ class OdInspector extends HTMLElement {
     return node;
   }
 
-  settings(hook) {
+  settings(hook, context) {
     const node = section("Settings");
     const raw = hook.hook || {};
+    if (isAntigravity(hook)) {
+      const flat = !(context && context.config && context.config.antigravity && context.config.antigravity.tool_events || []).includes(hook.event);
+      const unset = hook.timeout === null || hook.timeout === undefined;
+      const effective = hook.effective_timeout === undefined || hook.effective_timeout === null ? 30 : hook.effective_timeout;
+      const matcher = !hook.matcher || hook.matcher === "*" ? "all tools" : hook.matcher;
+      const directory = String(hook.source_file || "").split("/").slice(0, -1).join("/");
+      node.append(
+        rows([
+          ["Matcher", flat && hook.matcher ? `ignored on ${hook.event}` : flat ? null : matcher],
+          ["Timeout", `${effective} s${unset ? " (default)" : ""}`],
+          ["Type", hook.type || raw.type || "command"],
+          ["Working directory", directory],
+        ]),
+      );
+      return node;
+    }
     if (isHermes(hook)) {
       const unset = hook.timeout === null || hook.timeout === undefined;
       const effective = hook.effective_timeout === undefined || hook.effective_timeout === null ? 60 : hook.effective_timeout;
@@ -310,6 +326,7 @@ class OdInspector extends HTMLElement {
     const node = section("Status");
     const line = el("div", "od-insp-status");
     const status = statusOf(hook);
+    if (isAntigravity(hook)) return this.antigravityStatus(hook, status, node, line, context);
     if (isMember(hook)) {
       const count = layoutMembers(hook, context.layout).length;
       const chip = document.createElement("od-chip");
@@ -346,6 +363,34 @@ class OdInspector extends HTMLElement {
     if (status && status.reason && status.reason !== hook.reason && !reasons.includes(status.reason)) reasons.push(status.reason);
     if (hook.harness === "codex" && hook.trust) reasons.push(typeof hook.trust === "string" ? hook.trust : JSON.stringify(hook.trust));
     if (!reasons.length) reasons.push("No restriction applies to this hook.");
+    for (const reason of reasons) node.append(el("p", "od-insp-reason", reason));
+    return node;
+  }
+
+  antigravityStatus(hook, status, node, line, context) {
+    const chip = document.createElement("od-chip");
+    if (hook.status === "member") {
+      const members = context.layout.hooks.filter((item) => item.harness === "antigravity" && item.source_file === hook.source_file && item.event === hook.event && item.member === true);
+      chip.setAttribute("label", `Member ${members.findIndex((item) => item.id === hook.id) + 1} of ${members.length}`);
+    } else if (status) {
+      chip.setAttribute("kind", "status");
+      chip.setAttribute("value", status.value);
+    }
+    line.append(chip);
+    node.append(line);
+    const index = findingIndex(context.layout);
+    const reasons = [];
+    if (isPinned(hook)) reasons.push(`Pinned: ${pinReason(hook)} It keeps its place in every reorder.`);
+    else if (hook.status === "disabled") reasons.push("This hook spec has enabled set to false, so none of its handlers run.");
+    else if (hook.status === "disabled-plugin") reasons.push("The plugin is switched off in Antigravity's config.json.");
+    else if (hook.status === "file-skipped") {
+      const found = (hook.findings || []).map((id) => index.get(id)).find((item) => item && item.code === "ORD-AG-SKIPPED");
+      reasons.push(found ? found.message : "Antigravity skips this whole file.");
+    } else if (hook.status === "ignored-event") reasons.push("Antigravity ignores this event name, so the hook never runs.");
+    else if (hook.status === "prompt") reasons.push("A prompt hook calls a model; ordonnateur cannot fire it.");
+    else if (hook.status === "member") reasons.push("This hook sits in the ordonnateur spec, which holds the planned order.");
+    else if (hook.reason) reasons.push(hook.reason);
+    else reasons.push("No restriction applies to this hook.");
     for (const reason of reasons) node.append(el("p", "od-insp-reason", reason));
     return node;
   }

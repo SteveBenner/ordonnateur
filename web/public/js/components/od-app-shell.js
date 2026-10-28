@@ -135,6 +135,7 @@ class OdAppShell extends HTMLElement {
         { value: "claude-code", label: "Claude Code" },
         { value: "codex", label: "Codex" },
         { value: "hermes", label: "Hermes" },
+        { value: "antigravity", label: "Antigravity" },
         { value: "both", label: "All" },
       ],
       this.harness,

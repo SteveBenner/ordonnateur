@@ -5,6 +5,10 @@ import { shell, scopeLabel, changeCount } from "../core/plans.js";
 
 function providerOfScope(scope) {
   if (draft.isHermesScope(scope)) return "hermes:user";
+  if (draft.isAntigravityScope(scope)) {
+    const parsed = draft.parseAntigravityScope(scope);
+    return parsed.kind === "global" ? "antigravity:global" : `antigravity:workspace:${parsed.path}`;
+  }
   return `claude-code:${scope}`;
 }
 

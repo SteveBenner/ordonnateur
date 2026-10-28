@@ -1,12 +1,17 @@
 import { announce, toast } from "../core/announce.js";
-import { isHermes, isPinned, program } from "../core/hooks.js";
+import { agOrderable, agScopeName, isAntigravity, isHermes, isPinned, program } from "../core/hooks.js";
 import {
   HERMES_SCOPE,
+  agCommit,
+  agSequenceReason,
+  agUnits,
+  antigravityScope,
   cardStop,
   count,
   originalHermes,
   originalMembers,
   project as projectDraft,
+  projectAntigravity,
   projectHermes,
   setGuard,
   setHermesOrder,
@@ -62,8 +67,55 @@ export function hermesMoves(hook, context) {
   return { ids, index, enabled, disabled };
 }
 
+function agFrameIds(hook, context) {
+  const cell = projectAntigravity(context.layout, context.project).cells.get(`${hook.source_file}|${hook.event}`);
+  return cell && cell.frame ? cell.frame.map((item) => item.id) : [];
+}
+
+export function agMoves(hook, context) {
+  if (!context || context.readOnly || !isAntigravity(hook) || !agOrderable(hook)) return null;
+  const units = agUnits(context.layout, context.project, hook);
+  const frameIds = agFrameIds(hook, context);
+  const inFrame = frameIds.includes(hook.id);
+  const enabled = [];
+  const disabled = {};
+  let ids = [];
+  let index = -1;
+  if (units && (units.kind === "group" || units.ids.length >= 2)) {
+    ids = units.ids;
+    index = ids.indexOf(hook.id);
+    const names = ["up", "down", "first", "last"];
+    if (units.reason) for (const name of names) disabled[name] = units.reason;
+    else {
+      if (index > 0) enabled.push("up", "first");
+      else {
+        disabled.up = "Already first";
+        disabled.first = "Already first";
+      }
+      if (index < ids.length - 1) enabled.push("down", "last");
+      else {
+        disabled.down = "Already last";
+        disabled.last = "Already last";
+      }
+    }
+  }
+  if (inFrame) enabled.push("release");
+  else {
+    const reason = agSequenceReason(context.layout, context.project, hook, frameIds.concat(hook.id));
+    if (reason) disabled.sequence = reason;
+    else enabled.push("sequence");
+  }
+  return { ids, index, enabled, disabled, units, frameIds };
+}
+
 export function allowedActions(hook, context) {
   const allowed = ["select", "copy"];
+  if (isAntigravity(hook)) {
+    const moves = agMoves(hook, context);
+    if (!moves) return allowed;
+    const order = ["up", "down", "first", "last", "sequence", "release"];
+    return order.filter((name) => moves.enabled.includes(name)).concat(allowed);
+  }
   if (isHermes(hook)) {
     const moves = hermesMoves(hook, context);
     if (!moves) return allowed;
@@ -123,6 +175,7 @@ export function perform(action, hook, context, trigger) {
   }
   if (!allowedActions(hook, context).includes(action)) return false;
   const layout = context.layout;
+  if (isAntigravity(hook)) return performAntigravity(action, hook, context);
   if (isHermes(hook)) {
     const moves = hermesMoves(hook, context);
     const ids = moves.ids.slice();
@@ -166,6 +219,31 @@ export function commit(hook, context, ids, kind) {
   if (kind === "sequence") sentence = `Sequenced ${name} as position ${place} of ${ids.length} in ${hook.event}, ${scopeLabel(scope)}.`;
   if (kind === "release") sentence = `Released ${name} from the ${hook.event} sequence, ${scopeLabel(scope)}.`;
   setOrder(scope, context.project, base, hook.event, ids, null, originalMembers(layout, scope, hook.event), cardStop(layout, scope, hook.event));
+  announce(`${sentence} ${draftSentence(scope, context)}`);
+  document.dispatchEvent(new CustomEvent("od-hook-focus", { detail: { id: hook.id } }));
+  return true;
+}
+
+function performAntigravity(action, hook, context) {
+  const moves = agMoves(hook, context);
+  if (action === "sequence") return commitAntigravity(hook, context, "sequence", moves.frameIds.concat(hook.id));
+  if (action === "release") return commitAntigravity(hook, context, "release", moves.frameIds.filter((id) => id !== hook.id));
+  const ids = moves.ids.slice();
+  ids.splice(moves.index, 1);
+  const target = action === "up" ? moves.index - 1 : action === "down" ? moves.index + 1 : action === "first" ? 0 : ids.length;
+  ids.splice(target, 0, hook.id);
+  return commitAntigravity(hook, context, moves.units.kind === "frame" ? "frame" : "group", ids);
+}
+
+export function commitAntigravity(hook, context, kind, ids) {
+  if (!agCommit(context.layout, context.project, hook, kind, ids)) return false;
+  const name = program(hook).base;
+  const place = ids.indexOf(hook.id) + 1;
+  const where = `${hook.event}, ${agScopeName(hook)}`;
+  let sentence = `Moved ${name} to position ${place} of ${ids.length} in ${where}.`;
+  if (kind === "sequence") sentence = `Sequenced ${name} as position ${place} of ${ids.length} in ${where}.`;
+  if (kind === "release") sentence = `Released ${name} from the ordonnateur spec, ${where}.`;
+  const scope = antigravityScope(hook.scope, hook.source_file);
   announce(`${sentence} ${draftSentence(scope, context)}`);
   document.dispatchEvent(new CustomEvent("od-hook-focus", { detail: { id: hook.id } }));
   return true;
@@ -257,7 +335,7 @@ class OdHookMenu extends HTMLElement {
     panel.setAttribute("role", "menu");
     panel.setAttribute("aria-label", `Actions for ${program(hook).base}`);
     let first = true;
-    const moves = hermesMoves(hook, context);
+    const moves = hermesMoves(hook, context) || agMoves(hook, context);
     for (const group of GROUPS) {
       const present = group.filter((name) => allowed.includes(name) || (moves && name in moves.disabled));
       if (!present.length) continue;

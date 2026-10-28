@@ -5,6 +5,7 @@ require "digest"
 
 require_relative "../canonical"
 require_relative "../card"
+require_relative "../harnesses/antigravity"
 require_relative "../harnesses/hermes"
 require_relative "../inventory"
 require_relative "../lint"
@@ -57,8 +58,26 @@ module Ordonnateur
           "user" => Harnesses::ClaudeCode.settings_path("user", inventory.root),
           "local" => project ? Harnesses::ClaudeCode.settings_path("local", inventory.root) : nil,
           "codex" => File.join(Harnesses::Codex.home, "config.toml"),
-          "hermes" => Harnesses::Hermes.config_path
+          "hermes" => Harnesses::Hermes.config_path,
+          "antigravity" => {
+            "global" => Harnesses::Antigravity.global_path,
+            "workspace" => workspace_paths(inventory)
+          }
         }
+      end
+
+      def workspace_paths(inventory)
+        loaded = inventory.antigravity
+        return [] unless loaded
+
+        loaded[:files].select { |entry| entry[:scope] == "workspace" }.map { |entry| entry[:path] }
+      end
+
+      def pinned_flag(hook)
+        case hook.harness
+        when "hermes" then Harnesses::Hermes.pinned?(hook)
+        when "antigravity" then Harnesses::Antigravity.pinned?(hook)
+        end
       end
 
       def build(project)
@@ -69,8 +88,9 @@ module Ordonnateur
         timings = rows.to_h { |row| [row["id"], row.slice(*TIMING_KEYS)] }
         unguarded = Card.unguarded_map(inventory.root)
         hooks = inventory.hooks.map do |hook|
-          pinned = hook.harness == "hermes" ? Harnesses::Hermes.pinned?(hook) : nil
-          hook.to_h.merge(
+          pinned = pinned_flag(hook)
+          extra = hook.harness == "antigravity" ? { "member" => Harnesses::Antigravity.member?(hook) } : {}
+          hook.to_h.merge(extra).merge(
             "guard" => pinned.nil? ? Inventory.guard?(hook, unguarded[hook.scope] || []) : pinned,
             "hard_guard" => pinned.nil? ? (Inventory.hard_guard?(hook) ? true : false) : pinned,
             "effective_timeout" => hook.effective_timeout,

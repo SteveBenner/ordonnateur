@@ -4,7 +4,9 @@
 require "digest"
 require "time"
 
+require_relative "../antigravity_order"
 require_relative "../canonical"
+require_relative "../harnesses/antigravity"
 require_relative "../harnesses/claude_code"
 require_relative "../harnesses/hermes"
 require_relative "../hermes_order"
@@ -21,6 +23,8 @@ module Ordonnateur
       TTL = 3600
       MAX_CHANGES = 200
       OPS = %w[order release guard unguard].freeze
+      ANTIGRAVITY_SCOPES = %w[global workspace].freeze
+      SCOPES = (%w[user local] + ANTIGRAVITY_SCOPES).freeze
 
       Record = Struct.new(:id, :request, :at, :body, :applied)
 
@@ -36,13 +40,15 @@ module Ordonnateur
       def create(raw)
         project = project_param(raw["project"])
         scope = raw["scope"]
-        raise Failure.new(422, "invalid", "scope must be user or local") unless %w[user local].include?(scope)
+        raise Failure.new(422, "invalid", "scope must be user, local, global or workspace") unless SCOPES.include?(scope)
         raise Failure.new(422, "invalid", "local scope needs a project") if scope == "local" && project.nil?
+        raise Failure.new(422, "invalid", "workspace scope needs a project") if scope == "workspace" && project.nil?
         raise Failure.new(422, "invalid", "base must be the config fingerprint") unless raw["base"].is_a?(String) && !raw["base"].empty?
 
         inventory = @layout.inventory_for(project)
-        changes = validate_changes(raw["changes"], inventory)
-        hermes = hermes_draft?(changes, inventory)
+        antigravity = ANTIGRAVITY_SCOPES.include?(scope)
+        changes = validate_changes(raw["changes"], inventory, scope)
+        hermes = !antigravity && hermes_draft?(changes, inventory)
         raise Failure.new(422, "invalid", "Hermes plans use scope user") if hermes && scope != "user"
 
         rows = @layout.timing_rows
@@ -50,6 +56,10 @@ module Ordonnateur
         base_moved!(current) unless current["config"] == raw["base"]
         request = { "scope" => scope, "project" => project, "changes" => changes }
         request["harness"] = "hermes" if hermes
+        if antigravity
+          request["harness"] = "antigravity"
+          request["file"] = antigravity_file(changes, inventory, scope)
+        end
         at = Time.at(Time.now.to_i).utc
         built = build_or_fail(request, at, project)
         body = describe(built, request, at, inventory, rows, project)
@@ -90,18 +100,84 @@ module Ordonnateur
         value
       end
 
-      def validate_changes(raw, inventory)
+      def validate_changes(raw, inventory, scope)
         unless raw.is_a?(Array) && !raw.empty? && raw.length <= MAX_CHANGES
           raise Failure.new(422, "invalid", "changes must be a list of 1 to #{MAX_CHANGES} changes")
         end
 
         by_id = inventory.hooks.to_h { |hook| [hook.id, hook] }
+        if ANTIGRAVITY_SCOPES.include?(scope)
+          changes = raw.map { |item| normalize_antigravity(item, by_id, scope) }
+          check_events!(changes, by_id)
+          check_one_file!(changes, by_id)
+          return changes
+        end
+
         changes = raw.map { |item| normalize_change(item, by_id) }
         kinds = changes.map { |change| hermes_change?(change, by_id) }.uniq
         raise Failure.new(422, "invalid", "a draft cannot mix Hermes and Claude Code changes") if kinds.length > 1
 
         check_events!(changes, by_id)
         changes
+      end
+
+      def normalize_antigravity(item, by_id, scope)
+        raise Failure.new(422, "invalid", "each change must be an object") unless item.is_a?(Hash)
+
+        op = item["op"]
+        raise Failure.new(422, "invalid", "unknown op #{op.inspect}") unless OPS.include?(op)
+
+        case op
+        when "order"
+          event = event_name(item["event"], "antigravity")
+          hooks = item["hooks"]
+          unless hooks.is_a?(Array) && !hooks.empty? && hooks.all? { |id| id.is_a?(String) && !id.empty? }
+            raise Failure.new(422, "invalid", "order needs a non-empty list of hook ids")
+          end
+          raise Failure.new(422, "invalid", "stop_on_block applies to Claude Code only") unless item["stop_on_block"].nil?
+
+          known = hooks.map { |id| known_hook(id, by_id) }
+          check_antigravity_order!(event, known, scope)
+          { "op" => "order", "event" => event, "hooks" => hooks }
+        when "release"
+          { "op" => "release", "event" => event_name(item["event"], "antigravity") }
+        else
+          hook = known_hook(item["hook"], by_id)
+          if hook.harness == "antigravity"
+            raise Failure.new(422, "refused", "#{hook.id} is an Antigravity hook and Antigravity has no cards", { refusals: ["#{hook.id}: Antigravity has no cards"] })
+          end
+
+          raise Failure.new(422, "invalid", "a draft cannot mix Antigravity with other harnesses")
+        end
+      end
+
+      def check_antigravity_order!(event, known, scope)
+        unless known.all? { |hook| hook.harness == "antigravity" }
+          raise Failure.new(422, "invalid", "a draft cannot mix Antigravity with other harnesses")
+        end
+
+        plugin = known.find(&:plugin)
+        if plugin
+          raise Failure.new(422, "refused", "#{plugin.id} is a plugin hook and plugin files are read-only", { refusals: ["#{plugin.id}: plugin hooks are read-only"] })
+        end
+        raise Failure.new(422, "invalid", "all hooks of an order must be on #{event}") unless known.all? { |hook| hook.event == event }
+
+        stray = known.find { |hook| hook.scope != scope }
+        raise Failure.new(422, "invalid", "#{stray.id} is in the #{stray.scope} hooks, not the #{scope} hooks of this plan") if stray
+        raise Failure.new(422, "invalid", "all hooks of an order must be in one file") unless known.map(&:source_file).uniq.length == 1
+      end
+
+      def check_one_file!(changes, by_id)
+        files = changes.select { |change| change["op"] == "order" }.flat_map { |change| change["hooks"].map { |id| by_id[id].source_file } }.uniq
+        raise Failure.new(422, "invalid", "all changes of a draft must be in one file") if files.length > 1
+      end
+
+      def antigravity_file(changes, inventory, scope)
+        return nil unless scope == "workspace"
+
+        by_id = inventory.hooks.to_h { |hook| [hook.id, hook] }
+        order = changes.find { |change| change["op"] == "order" }
+        order ? by_id[order["hooks"].first].source_file : nil
       end
 
       def hermes_change?(change, by_id)
@@ -135,6 +211,7 @@ module Ordonnateur
           raise Failure.new(422, "invalid", "stop_on_block must be true or false") unless flag.nil? || [true, false].include?(flag)
 
           known = hooks.map { |id| known_hook(id, by_id) }
+          antigravity_scope!(known)
           change = { "op" => "order", "event" => event, "hooks" => hooks }
           change["stop_on_block"] = flag unless flag.nil?
           check_hermes_order!(change, known, flag)
@@ -145,8 +222,18 @@ module Ordonnateur
         else
           hook = known_hook(item["hook"], by_id)
           hermes_refusal!(hook.id) if hook.harness == "hermes"
+          if hook.harness == "antigravity"
+            raise Failure.new(422, "refused", "#{hook.id} is an Antigravity hook and Antigravity has no cards", { refusals: ["#{hook.id}: Antigravity has no cards"] })
+          end
+
           { "op" => op, "hook" => hook.id }
         end
+      end
+
+      def antigravity_scope!(known)
+        return unless known.any? { |hook| hook.harness == "antigravity" }
+
+        raise Failure.new(422, "invalid", "Antigravity plans use scope global or workspace and hold no other harness")
       end
 
       def check_hermes_order!(change, known, flag)
@@ -172,7 +259,8 @@ module Ordonnateur
       def event_name(value, harness = "claude-code")
         return value if value.is_a?(String) && Model.events_for(harness).include?(value)
 
-        raise Failure.new(422, "invalid", "unknown #{harness == 'hermes' ? 'Hermes' : 'Claude Code'} event #{value.inspect}")
+        label = { "hermes" => "Hermes", "antigravity" => "Antigravity" }.fetch(harness, "Claude Code")
+        raise Failure.new(422, "invalid", "unknown #{label} event #{value.inspect}")
       end
 
       def known_hook(id, by_id)
@@ -212,6 +300,7 @@ module Ordonnateur
 
       def build(request, at)
         return build_hermes(request, at) if request["harness"] == "hermes"
+        return build_antigravity(request, at) if request["harness"] == "antigravity"
 
         takeover = takeover_for(request, at)
         changes = request["changes"]
@@ -267,6 +356,67 @@ module Ordonnateur
         plan
       end
 
+      def build_antigravity(request, at)
+        project = request["project"]
+        scope = request["scope"]
+        cwd = scope == "workspace" ? Harnesses::ClaudeCode.project_root(project) : Dir.home
+        overlay = {}
+        steps = []
+        orders = []
+        reorder = true
+        engine = nil
+        request["changes"].each do |change|
+          engine, step, members = Overlay.with(overlay) do
+            order = AntigravityOrder.new(
+              scope: scope, project: project || Web.empty_root, ports: @ports, cwd: cwd, via: "web", at: at,
+              file: request["file"]
+            )
+            planned =
+              if change["op"] == "order"
+                order.plan_order(change["event"], change["hooks"])
+              else
+                order.plan_release(change["event"])
+              end
+            [order, planned, order.members_of(change["event"]).map(&:id)]
+          end
+          steps << step
+          reorder &&= step.mode == "in_place" || (step.mode == "members" && members.sort == step.after_ids.sort)
+          overlay = {}
+          overlay[step.settings_path] = step.settings_text_after unless step.settings_text_after.nil?
+          ledger = step.card_text_after || step.card_text_before
+          overlay[step.card_path] = ledger unless ledger.nil?
+          next if step.before_ids == step.after_ids && step.mode == "in_place"
+
+          orders << { "event" => change["event"], "before" => step.before_ids, "after" => step.after_ids }
+        end
+        plan = combine_antigravity(steps, engine)
+        { takeover: engine, plan: plan, plan_id: plan_id(plan), orders: orders, reorder: reorder }
+      end
+
+      def combine_antigravity(steps, engine)
+        first = steps.first
+        plan = steps.last.dup
+        plan.settings_text_before = first.settings_text_before
+        plan.settings_sha = first.settings_sha
+        plan.settings_mode = first.settings_mode
+        plan.card_text_before = first.card_text_before
+        final = steps.reverse.map(&:card_text_after).compact.first
+        plan.card_text_after = final == first.card_text_before ? nil : final
+        changed = plan.settings_text_after != plan.settings_text_before || !plan.card_text_after.nil?
+        plan.notes = steps.flat_map(&:notes).uniq.reject { |note| changed && note == "nothing to reorder" }
+        plan.refusals = steps.flat_map(&:refusals).uniq
+        moved = steps.reverse.find { |step| step.before_ids != step.after_ids }
+        if moved
+          plan.event = moved.event
+          plan.before_ids = moved.before_ids
+          plan.after_ids = moved.after_ids
+          plan.mode = moved.mode
+          plan.released_events = moved.released_events
+        end
+        plan.verdicts = engine.verdicts_for(plan)
+        plan
+      end
+
       def build_or_fail(request, at, project)
         build(request, at)
       rescue Refused => e
@@ -307,8 +457,9 @@ module Ordonnateur
         "pl_#{Digest::SHA256.hexdigest(Canonical.json(data))[0, 16]}"
       end
 
-      def classification(plan)
+      def classification(plan, built = nil)
         return "reorder" if plan.is_a?(HermesOrder::Plan)
+        return built && built[:reorder] ? "reorder" : "change" if plan.is_a?(AntigravityOrder::Plan)
 
         before = plan.card_before
         return "change" if before.nil? || plan.settings_text_after != plan.settings_text_before
@@ -338,14 +489,16 @@ module Ordonnateur
 
       def lint_after(plan, rows, project)
         overlay = { plan.settings_path => plan.settings_text_after }
-        overlay[plan.card_path] = plan.card_text_after if plan.card_path
+        overlay[plan.card_path] = plan.card_text_after if plan.card_path && (plan.card_text_after || !plan.is_a?(AntigravityOrder::Plan))
         Overlay.with(overlay) { @layout.findings(@layout.inventory_for(project), rows) }
       end
 
       def file_rows(takeover, plan)
+        card_path = plan.card_path
+        card_path = nil if plan.is_a?(AntigravityOrder::Plan) && plan.card_text_after.nil?
         [
           [plan.settings_path, plan.settings_text_before, plan.settings_text_after],
-          [plan.card_path, plan.card_text_before, plan.card_text_after]
+          [card_path, plan.card_text_before, plan.card_text_after]
         ].reject { |path, _, _| path.nil? }.map do |path, before, after|
           {
             "path" => path, "sha_before" => Digest::SHA256.hexdigest(before.to_s),
@@ -358,7 +511,7 @@ module Ordonnateur
         takeover = built[:takeover]
         plan = built[:plan]
         verdicts = verdict_rows(plan)
-        kind = classification(plan)
+        kind = classification(plan, built)
         reason = blocked_reason(takeover, plan, verdicts)
         before = @layout.findings(inventory, rows)
         after = lint_after(plan, rows, project)
@@ -370,9 +523,16 @@ module Ordonnateur
           "files" => file_rows(takeover, plan), "verdicts" => verdicts, "card_before" => plan.card_before,
           "card_after" => plan.card_after,
           "lint" => { "before" => before, "after" => after, "added" => after_ids - before_ids, "resolved" => before_ids - after_ids },
-          "effects_text" => plan.is_a?(HermesOrder::Plan) ? HermesOrder::RESTART_NOTE : EFFECTS_TEXT,
+          "effects_text" => effects_text(plan),
           "notes" => plan.notes, "created_at" => at.iso8601, "orders" => built[:orders] || []
         }
+      end
+
+      def effects_text(plan)
+        return HermesOrder::RESTART_NOTE if plan.is_a?(HermesOrder::Plan)
+        return AntigravityOrder::SESSION_NOTE if plan.is_a?(AntigravityOrder::Plan)
+
+        EFFECTS_TEXT
       end
 
       def check_unchanged!(record, rebuilt)
@@ -418,7 +578,9 @@ module Ordonnateur
         record.applied = true
         written = []
         written << plan.settings_path if plan.settings_text_after != plan.settings_text_before
-        written << plan.card_path if plan.card_text_after != plan.card_text_before
+        card_written = plan.card_text_after != plan.card_text_before
+        card_written &&= !plan.card_text_after.nil? if plan.is_a?(AntigravityOrder::Plan)
+        written << plan.card_path if card_written
         {
           "plan_id" => record.id, "applied" => true, "files" => written,
           "backups" => (Dir.glob(File.join(backups_dir, "*")) - known).sort,

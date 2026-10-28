@@ -9,6 +9,7 @@ require_relative "inventory"
 require_relative "card"
 require_relative "takeover"
 require_relative "hermes_order"
+require_relative "antigravity_order"
 require_relative "runner"
 require_relative "recorder"
 require_relative "lint"
@@ -23,9 +24,9 @@ module Ordonnateur
     USAGE = {
       "list" => "ordonnateur list [--harness H] [--event E] [--project DIR] [--json]",
       "card" => "ordonnateur card [--scope user|local] [--project DIR] [--json]",
-      "order" => "ordonnateur order <Event> <hook>... [--harness claude-code|hermes] [--scope user|local] [--project DIR] [--stop-on-block|--no-stop-on-block] [--apply]",
-      "move" => "ordonnateur move <Event> <hook> (--first|--last|--before <hook>|--after <hook>) [--harness claude-code|hermes] [--scope user|local] [--project DIR] [--apply]",
-      "release" => "ordonnateur release (<Event>|--all) [--harness claude-code|hermes] [--scope user|local] [--project DIR] [--apply]",
+      "order" => "ordonnateur order <Event> <hook>... [--harness claude-code|hermes|antigravity] [--scope user|local|global|workspace] [--project DIR] [--stop-on-block|--no-stop-on-block] [--apply]",
+      "move" => "ordonnateur move <Event> <hook> (--first|--last|--before <hook>|--after <hook>) [--harness claude-code|hermes|antigravity] [--scope user|local|global|workspace] [--project DIR] [--apply]",
+      "release" => "ordonnateur release (<Event>|--all) [--harness claude-code|hermes|antigravity] [--scope user|local|global|workspace] [--project DIR] [--file PATH] [--apply]",
       "unguard" => "ordonnateur unguard <hook> [--scope user|local] [--project DIR] [--apply]",
       "guard" => "ordonnateur guard <hook> [--scope user|local] [--project DIR] [--apply]",
       "lint" => "ordonnateur lint [--harness H] [--project DIR] [--json]",
@@ -89,12 +90,13 @@ module Ordonnateur
 
     def scope_option(parser, opts)
       opts[:scope] = "user"
-      parser.on("--scope S") { |v| opts[:scope] = v }
+      parser.on("--scope S") { |v| opts[:scope] = v; opts[:scope_given] = true }
       parser.on("--project DIR") { |v| opts[:project] = v }
       parser.on("--apply") { opts[:apply] = true }
     end
 
     NO_CARDS = "Hermes has no cards; ordonnateur reorders its hooks in place".freeze
+    NO_AG_CARDS = "Antigravity has no cards; ordonnateur orders its hooks in hooks.json".freeze
 
     def takeover_for(options)
       Takeover.new(scope: options[:scope], project: options[:project], ports: ports)
@@ -108,20 +110,71 @@ module Ordonnateur
       ref.to_s.start_with?("#{Model.prefix('hermes')}:")
     end
 
+    def antigravity_ref?(ref)
+      ref.to_s.start_with?("#{Model.prefix('antigravity')}:")
+    end
+
     def resolve_harness(options, refs)
       harness = options[:harness]
-      raise Usage, "harness must be claude-code or hermes" if harness && !%w[claude-code hermes].include?(harness)
+      unless harness.nil? || %w[claude-code hermes antigravity].include?(harness)
+        raise Usage, "harness must be claude-code, hermes or antigravity"
+      end
 
-      hermes = refs.compact.select { |ref| hermes_ref?(ref) }
-      if !hermes.empty? && hermes.length != refs.compact.length
+      refs = refs.compact
+      hermes = refs.select { |ref| hermes_ref?(ref) }
+      antigravity = refs.select { |ref| antigravity_ref?(ref) }
+      if (!hermes.empty? && hermes.length != refs.length) || (!antigravity.empty? && antigravity.length != refs.length)
         raise Refused, "refused:\n  hooks of different harnesses cannot be ordered together"
       end
       if harness == "claude-code" && !hermes.empty?
         raise Refused, "refused:\n  #{hermes.first} belongs to Hermes, not claude-code"
       end
+      if harness == "claude-code" && !antigravity.empty?
+        raise Refused, "refused:\n  #{antigravity.first} belongs to Antigravity, not claude-code"
+      end
+      if harness == "hermes" && !antigravity.empty?
+        raise Refused, "refused:\n  #{antigravity.first} belongs to Antigravity, not Hermes"
+      end
+      if harness == "antigravity" && !hermes.empty?
+        raise Refused, "refused:\n  #{hermes.first} belongs to Hermes, not Antigravity"
+      end
+      return "antigravity" if harness == "antigravity" || !antigravity.empty?
       return "hermes" if harness == "hermes" || !hermes.empty?
 
       "claude-code"
+    end
+
+    def antigravity_planner(options, refs, out)
+      raise Usage, "--stop-on-block does not apply to Antigravity" unless options[:stop].nil?
+
+      refs = refs.compact
+      plugin = refs.find { |ref| ref.start_with?("#{Model.prefix('antigravity')}:plugin:") }
+      raise Refused, "refused:\n  #{plugin}: plugin hooks are read-only" if plugin
+
+      from_refs = refs.filter_map do |ref|
+        case ref
+        when /\Aag:global:/ then "global"
+        when /\Aag:workspace:/ then "workspace"
+        end
+      end.uniq
+      if from_refs.length > 1
+        raise Refused, "refused:\n  hooks of different files cannot be ordered together"
+      end
+
+      scope = options[:scope_given] ? options[:scope] : (from_refs.first || "global")
+      unless %w[global workspace].include?(scope)
+        raise Usage, "Antigravity scope must be global or workspace"
+      end
+
+      file = options[:file] ? File.expand_path(options[:file]) : nil
+      out.puts "note: --project is ignored for the Antigravity global hooks" if scope == "global" && options[:project]
+      AntigravityOrder.new(scope: scope, project: scope == "workspace" ? options[:project] : nil, ports: ports, file: file)
+    end
+
+    def refuse_antigravity_card!(refs)
+      return unless refs.compact.any? { |ref| antigravity_ref?(ref) }
+
+      raise Refused, "refused:\n  #{NO_AG_CARDS}"
     end
 
     def hermes_planner(options, out)
@@ -299,8 +352,12 @@ module Ordonnateur
       event, *refs = argv
       raise Usage, "usage: #{USAGE['order']}" if event.nil?
 
-      if resolve_harness(options, refs) == "hermes"
+      case resolve_harness(options, refs)
+      when "hermes"
         planner = hermes_planner(options, out)
+        return run_plan(planner, planner.plan_order(event, refs), options, out)
+      when "antigravity"
+        planner = antigravity_planner(options, refs, out)
         return run_plan(planner, planner.plan_order(event, refs), options, out)
       end
       takeover = takeover_for(options)
@@ -319,8 +376,12 @@ module Ordonnateur
       event, ref = argv
       raise Usage, "usage: #{USAGE['move']}" if event.nil? || ref.nil? || options[:mode].nil?
 
-      if resolve_harness(options, [ref, options[:other]]) == "hermes"
+      case resolve_harness(options, [ref, options[:other]])
+      when "hermes"
         planner = hermes_planner(options, out)
+        return run_plan(planner, planner.plan_move(event, ref, options[:mode], options[:other]), options, out)
+      when "antigravity"
+        planner = antigravity_planner(options, [ref, options[:other]], out)
         return run_plan(planner, planner.plan_move(event, ref, options[:mode], options[:other]), options, out)
       end
       takeover = takeover_for(options)
@@ -332,13 +393,19 @@ module Ordonnateur
         scope_option(parser, opts)
         harness_option(parser, opts)
         parser.on("--all") { opts[:all] = true }
+        parser.on("--file PATH") { |v| opts[:file] = v }
       end
       event = argv.first
       raise Usage, "usage: #{USAGE['release']}" if (event.nil? && !options[:all]) || (event && options[:all])
 
-      harness = options[:harness]
-      raise Usage, "harness must be claude-code or hermes" if harness && !%w[claude-code hermes].include?(harness)
-      raise Refused, "refused:\n  #{NO_CARDS}" if harness == "hermes"
+      harness = resolve_harness(options, [])
+      raise Refused, "refused:\n  #{NO_CARDS}" if options[:harness] == "hermes"
+
+      if harness == "antigravity"
+        planner = antigravity_planner(options, [], out)
+        return run_plan(planner, planner.plan_release(options[:all] ? nil : event), options, out)
+      end
+      raise Usage, "--file applies only to Antigravity" if options[:file]
 
       takeover = takeover_for(options)
       run_plan(takeover, takeover.plan_release(options[:all] ? nil : event), options, out)
@@ -349,6 +416,7 @@ module Ordonnateur
       raise Usage, "usage: #{USAGE['unguard']}" if argv.length != 1
 
       refuse_hermes_card!(argv)
+      refuse_antigravity_card!(argv)
       takeover = takeover_for(options)
       run_plan(takeover, takeover.plan_unguard(argv.first), options, out)
     end
@@ -358,6 +426,7 @@ module Ordonnateur
       raise Usage, "usage: #{USAGE['guard']}" if argv.length != 1
 
       refuse_hermes_card!(argv)
+      refuse_antigravity_card!(argv)
       takeover = takeover_for(options)
       run_plan(takeover, takeover.plan_guard(argv.first), options, out)
     end

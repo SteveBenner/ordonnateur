@@ -1,5 +1,9 @@
 # AGENTS.md: ordonnateur
 
+[ENVS] when developing this repo: it serves real users; dev is `main`, test is `test`, prod is `stable`; run `polispec resolve .` before writing and obey its verdict; table in .agents/directives/envs.md   d/ENVS   ⚙ guard:polispec   ⚡ [always]
+
+[MICRODB] Read `.agents/directives/microdatabase.md` for corpus backup and mirror work when this plugin owns a corpus. The copied directive is dormant until then.
+
 ordonnateur is a plugin built on rplugin, the SDK for agent-harness plugins.
 `CLAUDE.md` links to this file, so every harness reads the same text.
 
@@ -29,6 +33,10 @@ ordonnateur is a plugin built on rplugin, the SDK for agent-harness plugins.
   ordonnateur` and `rplugin doctor ordonnateur`, all at zero findings, and run the plugin
   for real.
 - Guide: `~/.rplugin/docs/guides/writing-a-plugin.md`.
+- Releases go through polispec (`specs/polispec/environments.yml`): ship to main, promote with `polispec promote
+  ordonnateur --to test`, and leave stable to the operator, whose deploy pins the tag on the host and publishes it to
+  GitHub through `scripts/release.rb publish`. Never push to the GitHub repository or copy files into a clone of it
+  by hand, and never run `scripts/release.rb publish` yourself.
 
 ## Hot path and Codex
 
@@ -39,16 +47,21 @@ ordonnateur is a plugin built on rplugin, the SDK for agent-harness plugins.
 - Hermes: ordonnateur writes `$HERMES_HOME/config.yaml` only to permute the entries of one event, only through a plan
   (`HermesOrder`), with a backup. It never writes `shell-hooks-allowlist.json`, never passes `--accept-hooks`, and has
   no `run hermes` dispatcher.
+- Antigravity: ordonnateur writes only `<home>/config/hooks.json` and a workspace `.agents/hooks.json` (also `.agent`,
+  `_agents`, `_agent`), only through a plan (`AntigravityOrder`), with a backup, plus its own ledger under its state
+  home. It never writes a plugin's files, `config.json`, `plugin.json` or `plugins.json`, and has no `run antigravity`
+  dispatcher: the hook spec named `ordonnateur` holds the real handlers, which Antigravity runs in array order.
 
 ## The web app
 
 - `ordonnateur web` is `lib/ordonnateur/web.rb` and `lib/ordonnateur/web/`; its contract is `specs/web.yml`, and the
   browser code in `web/public` is plain ES modules with no build step, no CDN and no web fonts. `vendor/webrick` is
   loaded only by `lib/ordonnateur/web.rb`; the hot path and every other command never load it.
-- It changes hook order only through plans. The web builds each plan with `Takeover` (`HermesOrder` for Hermes), the
-  same code as the command line, and `apply` rebuilds the plan, compares its id and writes through `Takeover#apply`
-  (`HermesOrder#apply`). Never add a route that
+- It changes hook order only through plans. The web builds each plan with `Takeover` (`HermesOrder` for Hermes,
+  `AntigravityOrder` for Antigravity), the same code as the command line, and `apply` rebuilds the plan, compares its
+  id and writes through `Takeover#apply` (`HermesOrder#apply`, `AntigravityOrder#apply`). Never add a route that
   writes a harness file without a plan, and never apply a policy warn or deny from the web.
 - It is for the person at the browser. An agent never calls its API or starts it to make a change: it gives the user
   the `ordonnateur order` plan or points them to `ordonnateur web`.
-- Changing `web/public`: all five themes and the one switcher change in the same change.
+- Changing `web/public`: Chris designs it from the frontend skill catalog (TASTE), and all five canonical themes and
+  the one switcher change in the same change (THEMES). Copy theme tokens from `~/rstack/themes/`; never link them.

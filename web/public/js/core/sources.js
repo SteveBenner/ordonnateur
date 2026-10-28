@@ -1,10 +1,10 @@
 import { getPref, setPref } from "./cache.js";
 
-export const HARNESS_ORDER = ["claude-code", "codex", "hermes"];
+export const HARNESS_ORDER = ["claude-code", "codex", "hermes", "antigravity"];
 export const SHAPES = ["square", "diamond", "triangle"];
 
-const TAGS = { "claude-code": "Claude", codex: "Codex", hermes: "Hermes" };
-const RANKS = { managed: 0, user: 1, project: 2, local: 3, plugin: 4, disabled: 5 };
+const TAGS = { "claude-code": "Claude", codex: "Codex", hermes: "Hermes", antigravity: "Antigravity" };
+const RANKS = { managed: 0, user: 1, global: 1, project: 2, workspace: 2, local: 3, plugin: 4, disabled: 5 };
 const MAX_STORED = 64;
 
 const FIXED = {
@@ -19,6 +19,13 @@ const FIXED = {
 };
 
 export function rowKeyOfHook(hook) {
+  if (hook.harness === "antigravity") {
+    if (hook.status === "disabled-plugin") return "disabled";
+    if (hook.scope === "global") return "global";
+    if (hook.scope === "workspace") return `workspace:${hook.source_file || ""}`;
+    if (hook.plugin) return `plugin:${hook.plugin}`;
+    return hook.scope || "other";
+  }
   if (hook.plugin) return `plugin:${hook.plugin}`;
   if (hook.status === "disabled-plugin") return "disabled";
   return hook.scope || "other";
@@ -31,6 +38,8 @@ export function providerKey(hook) {
 export function rowLabel(key, harness) {
   const codex = harness === "codex";
   if (harness === "hermes" && key === "user") return "Profile config";
+  if (harness === "antigravity" && key === "global") return "Global hooks";
+  if (harness === "antigravity" && key.startsWith("workspace:")) return "Workspace hooks";
   if (key === "managed") return "Managed";
   if (key === "user") return codex ? "User config" : "User settings";
   if (key === "project") return codex ? "Project config" : "Project settings";
@@ -65,6 +74,7 @@ export function providerMeta(key) {
   const { harness, row } = splitKey(key);
   let kind = "other";
   if (row.startsWith("plugin:")) kind = "plugin";
+  else if (harness === "antigravity" && row.startsWith("workspace:")) kind = "workspace";
   else if (Object.prototype.hasOwnProperty.call(RANKS, row)) kind = row;
   const label = rowLabel(row, harness);
   let short = label;
@@ -95,6 +105,15 @@ function disambiguate(list) {
   const labels = new Map();
   for (const item of list) labels.set(item.label, (labels.get(item.label) || 0) + 1);
   for (const item of list) {
+    if (item.kind !== "workspace" || labels.get(item.label) < 2) continue;
+    const segments = item.row.slice(10).split("/").filter(Boolean);
+    const where = segments.slice(0, -1).slice(-2).join("/");
+    if (where) {
+      item.label = `${item.label} · ${where}`;
+      if (item.short === "Workspace hooks") item.short = item.label;
+    }
+  }
+  for (const item of list) {
     const tag = TAGS[item.harness] || item.harness;
     if (again.get(item.short) > 1) item.short = `${item.short} · ${tag}`;
     if (labels.get(item.label) > 1) item.label = `${item.label} · ${tag}`;
@@ -111,6 +130,15 @@ export function providersOf(layout, harness, project) {
   if (hooks.some((hook) => hook.harness === "claude-code")) {
     if (!counts.has("claude-code:user")) counts.set("claude-code:user", 0);
     if (project && !counts.has("claude-code:local")) counts.set("claude-code:local", 0);
+  }
+  if (hooks.some((hook) => hook.harness === "antigravity")) {
+    const files = (layout && layout.settings_files && layout.settings_files.antigravity) || {};
+    if (!counts.has("antigravity:global")) counts.set("antigravity:global", 0);
+    if (project) {
+      for (const path of files.workspace || []) {
+        if (!counts.has(`antigravity:workspace:${path}`)) counts.set(`antigravity:workspace:${path}`, 0);
+      }
+    }
   }
   const list = [...counts].map(([key, count]) => ({ ...providerMeta(key), count }));
   const rank = (item) => (Object.prototype.hasOwnProperty.call(RANKS, item.kind) ? RANKS[item.kind] : 6);

@@ -39,11 +39,12 @@ class OdSequence extends HTMLElement {
     const frame = el("section", "od-sequence");
     frame.dataset.scope = m.scope;
     frame.dataset.event = m.event;
-    frame.setAttribute("aria-label", `Sequence on ${m.event}, ${scopeLabel(m.scope)}`);
+    const spec = m.spec || null;
+    frame.setAttribute("aria-label", spec ? `Spec ${spec} on ${m.event}` : `Sequence on ${m.event}, ${scopeLabel(m.scope)}`);
     const head = el("div", "od-seq-head");
-    head.append(el("span", "od-seq-label", "Sequence"), el("span", "od-seq-count od-num", String(m.cards.length)));
+    head.append(el("span", "od-seq-label", spec || "Sequence"), el("span", "od-seq-count od-num", String(m.cards.length)));
     head.append(el("span", "od-spacer"));
-    if (m.editable) {
+    if (m.editable && !spec) {
       const toggle = document.createElement("od-toggle");
       toggle.setAttribute("label", "Stop on block");
       if (m.stop === true) toggle.setAttribute("checked", "");
