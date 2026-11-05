@@ -1,4 +1,4 @@
-import { get, post, del, endpoints, setCsrf } from "./api.js";
+import { get, post, del, endpoints, setSessionToken, hasSessionToken } from "./api.js";
 import { app } from "./store.js";
 
 function clearHash() {
@@ -37,9 +37,8 @@ async function exchange(code) {
   app.set({ session: "exchanging", cause: null });
   try {
     const result = await post(endpoints.session, { code });
-    setCsrf(result && result.csrf);
+    setSessionToken(result && result.token);
   } catch (error) {
-    setCsrf(null);
     app.set({ session: gateForFailure(error, "link_used_or_expired"), cause: error.message });
     return false;
   }
@@ -54,15 +53,17 @@ async function exchange(code) {
 }
 
 async function probe() {
+  if (!hasSessionToken()) {
+    app.set({ session: "no_session", cause: null });
+    return false;
+  }
   app.set({ session: "exchanging", cause: null });
   try {
-    const current = await get(endpoints.session);
-    setCsrf(current && current.csrf);
+    await get(endpoints.session);
     await loadConfig();
     app.set({ session: "active", cause: null, offline: false });
     return true;
   } catch (error) {
-    setCsrf(null);
     if (error.kind === "unauthorized") {
       app.set({ session: "no_session", cause: null });
     } else {
@@ -90,7 +91,7 @@ export async function endSession() {
   try {
     await del(endpoints.session);
   } finally {
-    setCsrf(null);
-    app.set({ session: "session_ended", cause: "Signed out" });
+    setSessionToken(null);
+    app.set({ session: "session_ended", cause: "Signed out of this tab" });
   }
 }

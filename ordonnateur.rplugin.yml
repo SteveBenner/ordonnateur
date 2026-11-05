@@ -1,7 +1,7 @@
 schema: rplugin/v1
 id: ordonnateur
 name: ordonnateur
-version: 0.2.12
+version: 0.2.17
 rplugin: ">= 1.19.0"
 native: true
 description: Puts each harness event's hooks in the order you choose, and lists, lints, times and test-fires every hook.
@@ -16,8 +16,8 @@ ports:
       summary: Lists the folders of a directory for the web app's Select a Folder picker and says which picker component a host serves.
       standalone: { file: lib/ordonnateur/folder_picker/standalone.rb, class: Ordonnateur::FolderPicker::Standalone }
 extensions:
-  enabled: [rstack, claude-code, codex, hermes, antigravity, os]
-  only: [claude-code, codex, hermes, antigravity]
+  enabled: [rstack, claude-code, codex, hermes, os]
+  only: [claude-code, codex, hermes]
 interface:
   display_name: ordonnateur
   category: Developer Tools
@@ -48,7 +48,7 @@ contents:
   docs: []
 compatibility:
   ruby: ">= 3.3"
-  harnesses: { claude-code: supported, codex: supported, cowork: unsupported, hermes: supported, antigravity: skills-only, pi: unsupported, deepseek-tui: unsupported }
+  harnesses: { claude-code: supported, codex: supported, cowork: unsupported, hermes: supported, antigravity: unsupported, pi: unsupported, deepseek-tui: unsupported }
 repository:
   remote: https://github.com/SteveBenner/ordonnateur.git
   store_path: ordonnateur

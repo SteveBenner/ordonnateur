@@ -11,11 +11,9 @@ module Ordonnateur
       CODE_TTL = 120
       SESSION_IDLE = 12 * 3600
       SESSION_CAP = 64
-      COOKIE = "od_session"
-      CSRF_HEADER = "X-Ordonnateur-CSRF"
       CODE_FORMAT = /\A([0-9a-f]{16})\.(\d{1,12})\.([0-9a-f]{32})\z/.freeze
 
-      Session = Struct.new(:token, :csrf, :created_at, :last_seen, :mutations)
+      Session = Struct.new(:token, :created_at, :last_seen, :mutations)
 
       def self.secret_path
         File.join(Web.dir, "launch.secret")
@@ -25,7 +23,10 @@ module Ordonnateur
         path = secret_path
         Web.ensure_dir
         create_secret(path) unless File.exist?(path)
-        File.read(path).strip
+        secret = File.read(path).strip
+        raise Stop.new("secret_empty", "#{path} holds no secret; delete it and start again to create a new one") if secret.empty?
+
+        secret
       end
 
       def self.read_secret
@@ -36,9 +37,16 @@ module Ordonnateur
       end
 
       def self.create_secret(path)
-        File.open(path, File::WRONLY | File::CREAT | File::EXCL, 0o600) { |file| file.write("#{SecureRandom.hex(32)}\n") }
+        temp = "#{path}.#{Process.pid}.#{SecureRandom.hex(4)}.tmp"
+        File.open(temp, File::WRONLY | File::CREAT | File::EXCL, 0o600) do |file|
+          file.write("#{SecureRandom.hex(32)}\n")
+          file.fsync
+        end
+        File.link(temp, path)
       rescue Errno::EEXIST
         nil
+      ensure
+        File.delete(temp) if temp && File.exist?(temp)
       end
 
       def self.mint(secret, now = Time.now.to_i)
@@ -119,7 +127,7 @@ module Ordonnateur
 
       def open_session(now)
         @sessions.delete(@sessions.min_by { |_, item| item.last_seen }.first) while @sessions.length >= SESSION_CAP
-        session = Session.new(SecureRandom.hex(32), SecureRandom.hex(32), now.to_f, now.to_f, [])
+        session = Session.new(SecureRandom.hex(32), now.to_f, now.to_f, [])
         @sessions[session.token] = session
         session
       end

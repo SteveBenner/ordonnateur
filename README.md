@@ -36,7 +36,10 @@ git clone https://github.com/SteveBenner/ordonnateur ~/.rplugins/ordonnateur
 ```
 
 Each release is tagged `vX.Y.Z`. To run a fixed release instead of the clone's current tree, pin its tag:
-`~/.rplugin/bin/rplugin install ~/.rplugins/ordonnateur --ref v0.2.12`; pinning an earlier tag is the rollback.
+`~/.rplugin/bin/rplugin install ~/.rplugins/ordonnateur --ref v0.2.17`; pinning an earlier tag is the rollback.
+rplugin does not install ordonnateur into Antigravity: Antigravity installs a plugin from a root `plugin.json`, and
+Codex prefers that file and then runs none of the plugin's hooks. ordonnateur still lists, lints, test-fires and
+orders Antigravity's hooks.
 
 Codex users must trust the session-start watch hook once in Codex's /hooks view. Hermes users must approve the
 session-start watch hook once (`hermes hooks`); ordonnateur never writes Hermes's allowlist.
@@ -82,9 +85,13 @@ A card is YAML (`specs/card.yml`). The user card is `${CLAUDE_CONFIG_DIR:-~/.cla
 lives under `${XDG_STATE_HOME:-~/.local/state}/rplugin/ordonnateur/cards/`, never inside a repository. Members run
 in list order, with the digest of each checked before it runs. With `stop_on_block`, a member that blocks ends the
 sequence. On a guard event (PreToolUse, UserPromptSubmit, PreCompact) the dispatcher fails closed: a card that cannot
-be read, an event the card has no entry for, a payload that is not a JSON object, or a member whose digest no longer
-matches its entry ends the event with exit 2 and the reason, so a hook behind the dispatcher cannot be skipped by
-editing the card. On every other event the same faults are reported with exit 1 and the event goes on.
+be read, an event the card has no entry for, a payload that is not a JSON object, a member whose digest no longer
+matches its entry, or any other failure while dispatching ends the event with exit 2 and the reason, so a hook behind
+the dispatcher cannot be skipped by editing the card. On every other event the same faults are reported with exit 1
+and the event goes on. Members run under `/bin/sh`, as Claude Code does on Linux and macOS, or under bash when the hook
+sets `shell` to `bash`. A member that times out can still block, but its output cannot allow, rewrite input, or add
+context. On a guard event, a member that exits 0 with output that starts with `{` but does not parse blocks the event,
+which is stricter than Claude Code.
 
 ## The web app
 
@@ -121,14 +128,15 @@ Antigravity hook order only through plans. It reads the same files the command l
   up and Move down, to reorder it in place (one click to apply); drag onto the frame or press `s` to gather a hook
   into the `ordonnateur` spec and `r` to release it (plan id typed). Plugin rows are read-only.
 - **Safety.** The server listens on loopback only. `ordonnateur web` prints a link that works once within 120
-  seconds; the page exchanges it for a session cookie the page's scripts cannot read, and every change carries a
-  CSRF token, an `Origin` that names the server and a `Host` that names the server, so a page on another site cannot
+  seconds; the page exchanges it for a session token that it keeps for that tab and sends as a header, so another
+  service on the same hostname never receives it, even on another port. A reload keeps the session; a new tab needs a
+  new link, and signing out ends only that tab's session. Every change also carries an `Origin` and a `Host` that name the server, so a page on another site cannot
   reach it. A session may make 30 changes a minute. `--read-only` and `ORDONNATEUR_WEB_DISABLED=1` turn writing and
   the app off. A bind address that is not loopback needs `--expose`, a terminal and the typed phrase
   `expose ordonnateur web`. An agent never drives the API: it gives the user the `order` plan or points them to
   `ordonnateur web`.
-- **Hosting.** Behind a reverse proxy, set `web.public_origin` to the one HTTPS origin the proxy publishes; links,
-  cookies (`Secure`) and the `Host` and `Origin` checks then use it. The plugin does not start a proxy or supervise
+- **Hosting.** Behind a reverse proxy, set `web.public_origin` to the one HTTPS origin the proxy publishes; links and the
+  `Host` and `Origin` checks then use it. The plugin does not start a proxy or supervise
   the server; run it from your own supervisor.
 - **Themes.** The app ships rStack's five themes (Minimal Dark, Minimal Light, Apple Noir, Apple Austere and
   Tronwave) behind one switcher; `system` follows the browser's light or dark setting.
@@ -139,7 +147,8 @@ State lives under `${XDG_STATE_HOME:-~/.local/state}/rplugin/ordonnateur/web/`: 
 ## The guard rule
 
 ordonnateur never absorbs a guard: a PreToolUse, UserPromptSubmit or PreCompact hook not in the card's unguarded
-list, a hook with `onFailure` "block", or a hook the policy port reports as protected.
+list, a hook with `onFailure` "block", or a hook the policy port reports as protected. It also leaves out async hooks,
+hooks that use the powershell shell, and hooks with an `if` filter, which the dispatcher cannot evaluate.
 
 ## Scopes and limits
 

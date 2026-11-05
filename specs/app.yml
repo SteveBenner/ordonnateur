@@ -1,6 +1,6 @@
 schema_version: 1
 name: ordonnateur
-version: 0.2.12
+version: 0.2.17
 kind: plugin
 purpose: >
   Gives each Claude Code event an ordered card of hooks that ordonnateur runs one after another from a single
@@ -11,7 +11,16 @@ purpose: >
   sequenced. `ordonnateur web` shows the same hooks as a layout of events and sources in a browser and changes Claude
   Code, Hermes and Antigravity hook order only through plans.
 commands: [list, lint, card, order, move, release, unguard, guard, fire, timings, watch, run, record, web, version]
+safety:
+  terminal_output: "Text the command line prints and watch notifications replace control characters other than newline and tab. JSON output escapes them instead."
+  previews: "Building a plan runs no program a repository configures. The Antigravity tracked-file check turns git's filesystem monitor off."
 contracts:
   card: specs/card.yml
   web: specs/web.yml
   environments: specs/polispec/environments.yml
+antigravity_install: >
+  ordonnateur is not installed into Antigravity (compatibility antigravity: unsupported, since 0.2.13): Antigravity
+  installs a plugin from its root plugin.json, Codex prefers that file over .codex-plugin/plugin.json and reads no hooks
+  from it, and rplugin 1.19.5 renders it only for a plugin with no Codex hooks or a claimed harness that needs it, so
+  claiming Antigravity silenced the Codex session-start watch hook. list, lint, fire, watch, order, move and release
+  still read and order Antigravity's hooks.

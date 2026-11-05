@@ -146,7 +146,8 @@ module Ordonnateur
       return false unless command.is_a?(String)
 
       words = Shellwords.split(command)
-      words.length >= 2 && words[0].end_with?("/ordonnateur") && words[1] == "run"
+      words.length == 6 && words[0].end_with?("/ordonnateur") && words[1] == "run" &&
+        words[2] == "claude-code" && words[4] == "--card"
     rescue ArgumentError
       false
     end

@@ -117,6 +117,7 @@ module Ordonnateur
       reasons << "type is #{hook.type.inspect}, only command hooks can be sequenced" unless hook.type == "command"
       reasons << "is async, async hooks cannot be sequenced" if hook.hook["async"] || hook.hook["asyncRewake"]
       reasons << "uses the powershell shell" if hook.hook["shell"] == "powershell"
+      reasons << "has an if filter, which the dispatcher cannot evaluate" if hook.hook["if"]
       reasons << "has a matcher that does not compile" unless Matcher.valid?(hook.matcher)
       twins = twin_files(claude, hook)
       reasons << "has an identical handler on #{hook.event} in #{twins.join(', ')}" unless twins.empty?

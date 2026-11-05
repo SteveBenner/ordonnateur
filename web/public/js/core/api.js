@@ -8,14 +8,30 @@ export const RETRY_BASE_MS = 250;
 export const RETRYABLE_STATUS = [502, 503, 504];
 export const MUTATION_LIMIT = 30;
 export const MUTATION_WINDOW_MS = 60000;
-let csrfToken = null;
+const TOKEN_KEY = "ordonnateur.web.session";
 
-export function setCsrf(token) {
-  csrfToken = token || null;
+function readStoredToken() {
+  try {
+    return window.sessionStorage.getItem(TOKEN_KEY);
+  } catch (error) {
+    return null;
+  }
 }
 
-export function hasCsrf() {
-  return csrfToken !== null;
+let sessionToken = readStoredToken();
+
+export function setSessionToken(token) {
+  sessionToken = token || null;
+  try {
+    if (sessionToken) window.sessionStorage.setItem(TOKEN_KEY, sessionToken);
+    else window.sessionStorage.removeItem(TOKEN_KEY);
+  } catch (error) {
+    return;
+  }
+}
+
+export function hasSessionToken() {
+  return sessionToken !== null;
 }
 
 export const limiter = {
@@ -95,6 +111,7 @@ function noteFailure(error, isExchange) {
   if (error.kind === "offline" && state.session === "active") {
     app.set({ offline: true });
   } else if (error.kind === "unauthorized") {
+    setSessionToken(null);
     if (state.session === "active") {
       app.set({ session: "session_ended", cause: "The session expired or was signed out" });
     } else if (state.session === "unknown" || state.session === "exchanging") {
@@ -128,8 +145,8 @@ export async function requestFull(method, path, options = {}) {
   const timeout = options.timeout || timeoutFor(verb, url.pathname);
 
   if (!isRead && !isExchange) {
-    if (!hasCsrf()) {
-      const missing = new ApiError("forbidden", "This tab has no CSRF token. Open a new link from the terminal.", {
+    if (!hasSessionToken()) {
+      const missing = new ApiError("forbidden", "This tab has no session. Open a new link from the terminal.", {
         status: 403,
       });
       noteFailure(missing, false);
@@ -148,7 +165,7 @@ export async function requestFull(method, path, options = {}) {
     headers["Content-Type"] = "application/json";
     payload = JSON.stringify(options.body);
   }
-  if (!isRead && csrfToken) headers["X-Ordonnateur-CSRF"] = csrfToken;
+  if (!isExchange && sessionToken) headers.Authorization = "Bearer " + sessionToken;
   if (options.etag) headers["If-None-Match"] = options.etag;
 
   const retryable = isRead && options.retry !== false;
@@ -176,7 +193,7 @@ export async function requestFull(method, path, options = {}) {
         method: verb,
         headers,
         body: payload,
-        credentials: "same-origin",
+        credentials: "omit",
         cache: "no-store",
         signal: controller.signal,
       });

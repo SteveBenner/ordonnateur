@@ -6,6 +6,7 @@ require "json"
 require "time"
 
 require_relative "model"
+require_relative "safe_output"
 require_relative "inventory"
 require_relative "lint"
 require_relative "timings"
@@ -80,9 +81,9 @@ module Ordonnateur
 
     def notify(new_findings)
       urgency = new_findings.any? { |item| item["severity"] == "error" } ? "critical" : "normal"
-      lines = new_findings.first(3).map { |item| item["message"] } + ["run ordonnateur lint for all"]
+      lines = new_findings.first(3).map { |item| SafeOutput.clean(item["message"]) } + ["run ordonnateur lint for all"]
       Rplugin::Notify.deliver(
-        { source: "ordonnateur", title: "ordonnateur: #{new_findings.length} new hook finding(s)",
+        { source: "ordonnateur", title: SafeOutput.clean("ordonnateur: #{new_findings.length} new hook finding(s)"),
           body: lines.join("\n"), urgency: urgency },
         ports: @ports
       )

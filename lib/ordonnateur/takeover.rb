@@ -390,8 +390,7 @@ module Ordonnateur
         Harnesses::ClaudeCode.write_file(plan.settings_path, plan.settings_text_after, mode: plan.settings_mode || 0o600)
       end
       if plan.card_text_after != plan.card_text_before
-        mode = Harnesses::ClaudeCode.mode_of(plan.card_path)
-        Harnesses::ClaudeCode.write_file(plan.card_path, plan.card_text_after, mode: mode)
+        Harnesses::ClaudeCode.write_file(plan.card_path, plan.card_text_after, mode: 0o600)
       end
       emit(plan)
       true

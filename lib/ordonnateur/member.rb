@@ -4,6 +4,8 @@
 require "json"
 require "open3"
 
+require_relative "model"
+
 module Ordonnateur
   module Member
     CAP = 1024 * 1024
@@ -19,7 +21,7 @@ module Ordonnateur
       if args.is_a?(Array) && !args.empty?
         [command, *args.map(&:to_s)]
       else
-        ["/bin/sh", "-c", command.to_s]
+        [hook["shell"] == "bash" ? "bash" : "/bin/sh", "-c", command.to_s]
       end
     end
 
@@ -146,15 +148,25 @@ module Ordonnateur
       stdout = result.stdout.strip
       stderr = result.stderr.strip
       json = nil
+      unparsable = false
       if stdout.start_with?("{")
         parsed = begin
           JSON.parse(stdout)
         rescue JSON::ParserError
+          unparsable = true
           nil
         end
         json = parsed if parsed.is_a?(Hash)
       end
       code = result.exit
+      succeeded = result.exit == 0 && !result.timed_out && result.spawn_error.nil?
+      json = nil if json && result.timed_out && !BLOCKING.include?(json_outcome(event, json))
+      forced = false
+      if unparsable && succeeded && Model::GUARD_EVENTS.include?(event)
+        code = 2
+        forced = true
+        stderr = "ordonnateur: the hook's output starts with { but is not valid JSON, so #{event} is blocked"
+      end
       outcome =
         if result.spawn_error then "error"
         elsif result.timed_out then "timeout"
@@ -167,7 +179,7 @@ module Ordonnateur
         end
       json = nil if result.spawn_error
       {
-        outcome: outcome, json: json, plain: json ? "" : stdout, stderr: stderr, exit: code, ms: result.ms,
+        outcome: outcome, json: json, plain: json || !succeeded || forced ? "" : stdout, stderr: stderr, exit: code, ms: result.ms,
         stdout_bytes: result.stdout_bytes, raw_stdout: result.stdout, raw_stderr: result.stderr
       }
     end

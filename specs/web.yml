@@ -30,9 +30,9 @@ command:
     - "open this link within 120 seconds, it works once:"
     - "<origin>/#k=<one-time code>"
   url_subcommand: "Prints a fresh one-time link for the running server, signed with the launch secret, without contacting the server. Exit 2 not_running when no live server.json exists."
-  single_instance: "One server per state home. <state>/web/server.json holds pid, port, bind, public_origin and started_at; a second start exits 2 already_running; a record whose pid is dead is renamed aside with a UTC stamp."
+  single_instance: "One server per state home. A server holds an exclusive lock on <state>/web/server.lock (mode 0600) from before it reads the launch secret until it exits. A start that cannot take the lock exits 2 already_running. <state>/web/server.json holds pid, port, bind, public_origin and started_at; a start also exits 2 already_running when that record names a live pid, and a record whose pid is dead is renamed aside with a UTC stamp."
   shutdown: "SIGINT and SIGTERM stop the server; the exit removes server.json when it is ours."
-  exit_codes: { 0: stopped cleanly, 2: "usage, refused (disabled, expose_required, not_tty, already_running, port_in_use, bind_failed, not_running)" }
+  exit_codes: { 0: stopped cleanly, 2: "usage, refused (disabled, expose_required, not_tty, already_running, port_in_use, bind_failed, not_running, secret_empty)" }
   dependencies: "Ruby standard library plus the WEBrick copy in vendor/webrick, loaded only by `ordonnateur web`. `ordonnateur run` and `ordonnateur record` never load it."
   state_dir: "<state> is ${XDG_STATE_HOME:-~/.local/state}/rplugin/ordonnateur. <state>/web is mode 0700."
 
@@ -40,23 +40,23 @@ settings:
   - { key: web.enabled, type: bool, default: true, kill_switch: ORDONNATEUR_WEB_DISABLED, meaning: "false refuses `ordonnateur web` with exit 2 disabled, and a running server answers every apply 403 disabled (read at each apply)." }
   - { key: web.bind, type: string, default: 127.0.0.1 }
   - { key: web.port, type: int, default: 7422, min: 0, max: 65535 }
-  - { key: web.public_origin, type: string, default: "", meaning: "One exact HTTPS origin for a reverse proxy (scheme https, a host, an optional port; no credentials, path, query or fragment, else startup exits 2). Links use it, the Host and Origin checks admit it, cookies carry Secure." }
+  - { key: web.public_origin, type: string, default: "", meaning: "One exact HTTPS origin for a reverse proxy (scheme https, a host, an optional port; no credentials, path, query or fragment, else startup exits 2). Links use it, and the Host and Origin checks admit it." }
   - { key: web.theme, type: enum, options: [system, apple-noir, apple-austere, tronwave, minimal-dark, minimal-light], default: system, meaning: "Theme on a first visit; system follows the browser's light or dark preference. The viewer's own choice, kept in the browser, wins." }
   - { key: web.projects, type: string, default: "", meaning: "Colon-separated absolute project roots whose local scope is always listed." }
   - { key: web.discover, type: bool, default: true, meaning: "Lists projects Claude Code knows: only the keys of the projects object in the Claude Code state file are read." }
 
 session:
-  launch_secret: "<state>/web/launch.secret, 32 random bytes as hex, mode 0600, kept across restarts."
+  launch_secret: "<state>/web/launch.secret, 32 random bytes as hex, mode 0600, kept across restarts. It is written and synced to a private temporary file and hard-linked into place, so the path only ever holds a complete secret and the first of several simultaneous starts wins. A secret file that is empty after stripping whitespace stops startup with exit 2 secret_empty and is left untouched; the operator deletes it to create a new one."
   one_time_code: "nonce.expiry.mac, mac = first 32 hex of HMAC-SHA256(secret, nonce + '.' + expiry); valid 120 seconds, usable once (seen nonces remembered until expiry). It travels in the URL fragment #k=."
-  exchange: "POST /api/v1/session {code} answers 200 {csrf, expires_at} and Set-Cookie od_session=<token>; HttpOnly; SameSite=Strict; Path=/ (plus Secure when a public origin is set). A used, expired or forged code answers 401 unauthorized."
-  limits: "At most 64 sessions, least recently used dropped beyond. A session expires after 12 hours without a request. GET /api/v1/session returns csrf and expires_at; DELETE ends it."
-  csrf: "Every request that is not GET or HEAD carries X-Ordonnateur-CSRF equal to the session's token, else 403 forbidden."
+  exchange: "POST /api/v1/session {code} answers 200 {token, expires_at}. No response sets a cookie and no request reads one. A used, expired or forged code answers 401 unauthorized."
+  limits: "At most 64 sessions, least recently used dropped beyond. A session expires after 12 hours without a request. GET /api/v1/session returns expires_at and never the token; DELETE ends it."
+  bearer: "Every route except POST /api/v1/session and static files needs Authorization: Bearer <token>, 64 hex characters. The page keeps the token in sessionStorage under ordonnateur.web.session, so a sibling service on the same hostname never receives it, even on another port, a reload keeps the session, a new tab needs a new link, and each link opens its own session, so signing out ends that tab's session and leaves others running until they expire. Browsers never attach it to a request by themselves, so no CSRF token is needed."
   origin: "Every such request carries an Origin naming this server (http://127.0.0.1:<port>, http://localhost:<port> or the bind address), else 403. When web.public_origin is set, only that exact origin passes. POST /session accepts a missing Origin and refuses a foreign one."
   host: "Every request, static files included, carries a Host naming this server and port (or the public origin's host and effective port), else 403. This blocks DNS rebinding."
-  unauthenticated: "Every route except POST /api/v1/session and static files answers 401 without a valid cookie."
+  unauthenticated: "Every route except POST /api/v1/session and static files answers 401 without a valid bearer token."
 
 http:
-  body_limit: "Request bodies above 1 MiB answer 413. A request with a Transfer-Encoding header (a chunked body) answers 411 before the body is read."
+  body_limit: "Request bodies above 1 MiB answer 413. On every route, static files included, a request with a Transfer-Encoding header (a chunked body) answers 411 before any other check, and the connection closes without the body or its trailers being read."
   request_id: "Every response carries X-Request-Id (16 hex)."
   error_shape: "{error, message, request_id} plus fields named per error."
   caching: "API responses are Cache-Control: no-store. Static files carry an ETag and Cache-Control: no-cache."
@@ -66,7 +66,7 @@ http:
   log: "<state>/web/server.log, access and error lines, mode 0600, rotated once to server.log.1 at 4 MiB."
 
 limiter:
-  rule: "Each session may make 30 changes in any 60 seconds; the 31st answers 429 rate_limited with Retry-After in seconds. A change is any request that is not GET or HEAD and passes the read-only, CSRF and Origin checks, accepted or not. POST /api/v1/session is outside the limiter."
+  rule: "Each session may make 30 changes in any 60 seconds; the 31st answers 429 rate_limited with Retry-After in seconds. A change is any request that is not GET or HEAD and passes the read-only and Origin checks, accepted or not. POST /api/v1/session is outside the limiter."
   apply_lock: "One apply runs at a time in the process; a second waits for the first."
 
 routes:

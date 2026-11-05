@@ -518,7 +518,7 @@ module Ordonnateur
     end
 
     def tracked?(path)
-      _out, status = Open3.capture2e("git", "-C", File.dirname(path), "ls-files", "--error-unmatch", path)
+      _out, status = Open3.capture2e("git", "-c", "core.fsmonitor=false", "-C", File.dirname(path), "ls-files", "--error-unmatch", path)
       status.success?
     rescue SystemCallError
       false

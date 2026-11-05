@@ -7,6 +7,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.17] - 2026-11-04
+
+### Fixed
+
+- **`ordonnateur web`'s session cookie reached every service on the same hostname.** Browsers scope cookies by hostname
+  and ignore the port, so another service on `127.0.0.1` or on a shared public name received it. The session is now a
+  token the page keeps in `sessionStorage` and sends as a header, which replaces the cookie and the CSRF token. A reload
+  keeps the session, a new tab now needs a new link from `ordonnateur web url`, and signing out ends only that tab's
+  session. Measured in Chromium with a second service on another port: it received the session cookie before, and nothing
+  after.
+
+## [0.2.16] - 2026-11-04
+
+### Changed
+
+- **Published releases carried notes about how this project is developed.** `AGENTS.md`, `specs/app.yml`, and this
+  changelog now describe the plugin, and the published `AGENTS.md` leaves out rows whose targets are not published. Tags
+  v0.2.9, v0.2.10, and v0.2.12 were re-created with the same code and those texts reworded, so a clone that already holds
+  them needs `git fetch --tags --force`. Measured on the rewritten tags: only `AGENTS.md`, `specs/app.yml`, and
+  `CHANGELOG.md` differ from the originals.
+
+## [0.2.15] - 2026-11-04
+
+### Fixed
+
+- **A dispatcher crash on a guard event let the action go ahead.** An event the dispatcher could not process raised out
+  of `ordonnateur run`, and its exit 1 is non-blocking, so no member ran. Any failure while dispatching a guard event now
+  exits 2 with the reason. Measured on two such events: exit 1 with no member run before, exit 2 after.
+- **A hook that timed out could still grant permission.** Claude Code discards a timed-out hook's output, but the
+  dispatcher kept it. A timed-out member can now block but cannot allow, rewrite input, or add context, and plain stdout
+  counts only on exit 0. Measured: `allow` emitted after a timeout before, none after; stdout of an exit 1 hook passed on
+  as context before, dropped after.
+- **A guard's deny could be lost when the dispatcher could not parse the hook's output.** Output that failed to parse
+  counted as plain text with exit 0. On a guard event such output now blocks, which is stricter than Claude Code. This
+  includes output cut at the 1 MiB cap. Measured: nothing enforced before, deny after.
+- **A hook that set `shell` to `bash` ran under `/bin/sh`.** `Member.argv` ignored the field, so where `/bin/sh` is dash
+  a guard using bash syntax failed with a non-blocking error instead of blocking. The field is now honoured, and hooks
+  without it still run under `/bin/sh`, as Claude Code does on Linux and macOS. Measured on a guard with `shell` set to
+  `bash`: error with exit 127 before, deny after.
+- **A hook's `if` filter was lost once it was on a card.** Only Claude Code evaluates that filter, so the hook ran on
+  every event its matcher accepted. Hooks with an `if` field are no longer sequenced; a member already on a card is
+  unchanged, so `release` any that use one. Measured: status `native`, which can be sequenced, before, and
+  `not-sequenceable` after.
+- **Editing a member's matcher hid the edit.** The matcher was checked before the digest, so an entry edited to stop
+  matching was skipped as unmatched. The digest now comes first. Measured: nothing enforced before, deny after.
+- **Previewing an Antigravity workspace plan could run a program the repository configured.** A preview no longer runs
+  repository-configured commands. Measured in a scratch repository: the program ran during a preview before, and did not
+  after.
+- **A new card could be readable by other accounts.** `Takeover#apply` gave a new card the default mode, though it holds
+  hook commands copied from the settings file. Every card write now sets 0600. Measured from a 0600 settings file: card
+  mode 664 before, 600 after. An existing card tightens on its next write.
+- **`ordonnateur list` printed raw terminal control bytes from hook commands**, so a project's settings could rewrite
+  what the terminal showed. Command-line output and watch notifications now replace them. Measured: ESC and BEL present
+  before, absent after.
+- **A longer command could be listed as a dispatcher.** Only the exact generated shape qualifies now. Measured: status
+  `dispatcher` before, `not-sequenceable` after.
+- **Chunked requests were refused only on some routes.** Every route now answers 411 first and closes the connection.
+  Measured: 405 and 403 with the connection open before, 411 and closed after.
+- **Simultaneous starts could run more than one server for a state home**, because the single-instance check tested a
+  file that was only written once the server was listening. A server now holds a lock on `server.lock`. Measured over 12
+  rounds of 6 simultaneous starts: 35 servers before, exactly 1 per round after.
+
+## [0.2.14] - 2026-11-04
+
+### Fixed
+
+- **An interrupted first start of `ordonnateur web` could leave an empty launch secret that later starts accepted.** The
+  secret file was created first and filled second, and nothing refused an empty one. It is now written and synced to a
+  private temporary file and hard-linked into place, so the file is complete whenever it exists and the first of several
+  simultaneous starts wins. Startup refuses an empty launch secret with exit 2 `secret_empty` and leaves the file in
+  place; delete it and start again to create a new one. Measured: a kill during the write left a 0-byte file that the
+  next start served from before, and left no file and a clean restart after. Over 12 rounds of 6 simultaneous first
+  starts, 1 of 14 servers held a secret the file did not contain before, and 0 of 35 after.
+
+## [0.2.13] - 2026-10-28
+
+### Fixed
+
+- `rplugin check` passes again under rplugin 1.19.5, which refused ordonnateur with two findings (root `plugin.json`
+  stale, and Codex ignoring the plugin's hooks). Codex prefers the root Agent Plugins `plugin.json` over
+  `.codex-plugin/plugin.json` and reads no hooks from it, and rplugin renders that file only when a claimed harness
+  needs it, here Antigravity's skill install. The manifest now marks Antigravity `unsupported` and leaves it out of
+  `extensions.enabled` and `extensions.only`, `rplugin package` removed the root `plugin.json`, and Codex can run the
+  session-start `watch` hook once it is trusted in `/hooks`.
+
+### Removed
+
+- The Antigravity skill install. The Antigravity skill copy that 0.2.12 refreshed stays installed and is no longer
+  updated. `list`, `lint`, `fire`,
+  `watch`, `order`, `move` and `release` keep reading and ordering Antigravity's hooks.
+
 ## [0.2.12] - 2026-10-28
 
 ### Fixed

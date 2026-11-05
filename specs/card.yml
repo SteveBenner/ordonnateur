@@ -32,6 +32,12 @@ fields:
           absorbed_at: { type: string, meaning: "UTC ISO 8601 time the hook became a member." }
 canonical_json: "JSON.generate of the value with object keys sorted recursively."
 rules:
-  - "Members run in list order. A member whose matcher does not match the payload is skipped without being shown."
-  - "A member whose digest no longer matches its matcher and hook is not run and lint reports ORD-CARD-DIGEST. On a guard event (PreToolUse, UserPromptSubmit, PreCompact) that member counts as a block with exit 2 and the reason, as does a card that cannot be read, an event with no entry or a payload that is not a JSON object; on any other event they are reported with exit 1."
+  - "Members run in list order. A member's digest is checked before its matcher. A member whose matcher does not match the payload is skipped without being shown."
+  - "A member whose digest no longer matches its matcher and hook is not run and lint reports ORD-CARD-DIGEST. On a guard event (PreToolUse, UserPromptSubmit, PreCompact) that member counts as a block with exit 2 and the reason, as does a card that cannot be read, an event with no entry, a payload that is not a JSON object or any other failure while dispatching; on any other event they are reported with exit 1."
+  - "A member with no args runs under /bin/sh, as Claude Code does on Linux and macOS, or under bash when its shell field is bash; a missing bash is a spawn error. A member with args runs without a shell."
+  - "A member that exits nonzero other than 2 keeps its valid JSON, as Claude Code does. After a timeout, JSON that blocks or denies still counts and any other JSON is dropped, so a timed-out hook can block but cannot allow, rewrite input or add context. Plain stdout counts only on exit 0."
+  - "A hook with an if field is not sequenceable, because the dispatcher cannot evaluate permission rule syntax. A member already on a card is unchanged."
+  - "On a guard event, a member that exits 0 with stdout that starts with an opening brace but does not parse, including stdout cut at the 1 MiB cap, counts as a block with exit 2 and the reason. This is stricter than Claude Code, which treats invalid JSON as a non-blocking error."
+  - "ordonnateur writes a card with mode 0600 every time, whatever mode the file had."
+  - "A hook is a dispatcher only when its command is exactly six shell words: a program path ending in /ordonnateur, run, claude-code, the event, --card and the card path."
   - "The dispatcher entry for an event exists exactly while the event has members."

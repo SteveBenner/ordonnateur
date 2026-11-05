@@ -16,6 +16,7 @@ require_relative "lint"
 require_relative "timings"
 require_relative "fire"
 require_relative "watch"
+require_relative "safe_output"
 
 module Ordonnateur
   module Cli
@@ -42,6 +43,8 @@ module Ordonnateur
     module_function
 
     def run(argv, out: $stdout, err: $stderr)
+      out = SafeOutput.new(out)
+      err = SafeOutput.new(err)
       command = argv.shift
       case command
       when nil, "--help", "-h", "help"

@@ -13,6 +13,7 @@ module Ordonnateur
   module Web
     class App
       CSP = "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+      BEARER = /\ABearer ([0-9a-f]{64})\z/.freeze
       SAFE = %w[GET HEAD].freeze
       MAX_BODY = 1024 * 1024
       PLAN_ID = /\Apl_[0-9a-f]{16}\z/.freeze
@@ -82,6 +83,7 @@ module Ordonnateur
       def dispatch(exchange)
         req = exchange.req
         path = req.path
+        guard_chunked(req)
         guard_host(req)
         api = path == "/api" || path.start_with?("/api/")
         return serve_static(exchange) unless api
@@ -95,7 +97,7 @@ module Ordonnateur
           fail!(403, "forbidden", "the Origin is not this server") unless origin.empty? || allowed_origin?(origin)
           return route(exchange, rest)
         end
-        exchange.session = @ctx.auth.lookup(cookie(req, Auth::COOKIE))
+        exchange.session = @ctx.auth.lookup(bearer(req))
         fail!(401, "unauthorized", "no valid session; open a new link from the terminal") unless exchange.session
         guard_write(exchange, rest) unless SAFE.include?(method)
         route(exchange, rest)
@@ -106,20 +108,13 @@ module Ordonnateur
         parts[0, 2] == %w[api v1] ? parts[2..] : nil
       end
 
-      def cookie(req, name)
-        req["Cookie"].to_s.split(";").each do |pair|
-          key, value = pair.strip.split("=", 2)
-          return value.to_s if key == name
-        end
-        nil
+      def bearer(req)
+        BEARER.match(req["Authorization"].to_s)&.captures&.first
       end
 
       def guard_write(exchange, rest)
         req = exchange.req
         fail!(405, "read_only", "ordonnateur web is running read-only") if @ctx.read_only && rest != ["session"]
-        unless Auth.equal?(req[Auth::CSRF_HEADER], exchange.session.csrf)
-          fail!(403, "forbidden", "the CSRF header is missing or wrong")
-        end
         fail!(403, "forbidden", "the Origin is not this server") unless allowed_origin?(req["Origin"])
         granted, wait = @ctx.limiter.take(exchange.session)
         return if granted
@@ -127,10 +122,13 @@ module Ordonnateur
         fail!(429, "rate_limited", "more than #{Limiter::LIMIT} changes in a minute", { retry_after: wait })
       end
 
+      def guard_chunked(req)
+        return if req["Transfer-Encoding"].to_s.empty?
+
+        fail!(411, "length_required", "chunked request bodies are not accepted; send a Content-Length")
+      end
+
       def guard_size(req)
-        unless req["Transfer-Encoding"].to_s.empty?
-          fail!(411, "length_required", "chunked request bodies are not accepted; send a Content-Length")
-        end
         length = req["Content-Length"].to_i
         fail!(413, "too_large", "the request body is larger than #{MAX_BODY} bytes") if length > MAX_BODY
       end
@@ -275,28 +273,21 @@ module Ordonnateur
       end
 
       def session_payload(session)
-        { "csrf" => session.csrf, "expires_at" => @ctx.auth.expires_at(session) }
-      end
-
-      def cookie_attributes
-        "HttpOnly; SameSite=Strict; Path=/#{'; Secure' if @ctx.public_origin}"
+        { "expires_at" => @ctx.auth.expires_at(session) }
       end
 
       def route_session(exchange, rest)
         fail!(404, "not_found", "no such route") unless rest.length == 1
-        res = exchange.res
         case exchange.req.request_method
         when "POST"
           code = body_object(exchange)["code"]
           session = @ctx.auth.exchange(code)
           fail!(401, "unauthorized", "the link is used or expired; open a new link from the terminal") unless session
-          res["Set-Cookie"] = "#{Auth::COOKIE}=#{session.token}; #{cookie_attributes}"
-          json(exchange, 200, session_payload(session))
+          json(exchange, 200, session_payload(session).merge("token" => session.token))
         when "GET", "HEAD"
           json(exchange, 200, session_payload(exchange.session))
         when "DELETE"
           @ctx.auth.close(exchange.session.token)
-          res["Set-Cookie"] = "#{Auth::COOKIE}=; #{cookie_attributes}; Max-Age=0"
           json(exchange, 200, { "ok" => true })
         else
           fail!(405, "method_not_allowed", "unsupported method")

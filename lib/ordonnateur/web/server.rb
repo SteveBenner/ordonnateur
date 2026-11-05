@@ -126,6 +126,7 @@ module Ordonnateur
         raise Stop.new("bind_failed", "cannot bind #{@bind}:#{@port}: #{e.message}")
       ensure
         release_info_file
+        @instance_lock&.close
         @log&.close
       end
 
@@ -181,6 +182,16 @@ module Ordonnateur
       end
 
       def claim_info_file
+        @instance_lock = File.open(File.join(Web.dir, "server.lock"), File::RDWR | File::CREAT, 0o600)
+        unless @instance_lock.flock(File::LOCK_EX | File::LOCK_NB)
+          held = self.class.read_info
+          if held
+            raise Stop.new("already_running", "ordonnateur web is already running as pid #{held['pid']} on #{held['bind']}:#{held['port']}")
+          end
+
+          raise Stop.new("already_running", "ordonnateur web is already starting or running for this state home")
+        end
+
         path = self.class.info_path
         return unless File.exist?(path)
 

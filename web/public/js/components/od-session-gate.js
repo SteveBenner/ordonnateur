@@ -8,7 +8,7 @@ const NS = "http://www.w3.org/2000/svg";
 const GATES = {
   exchanging: {
     title: "Opening ordonnateur web",
-    body: () => "Checking the one-time link.",
+    body: () => "Checking the session.",
     hourglass: true,
   },
   link_used_or_expired: {
@@ -18,7 +18,7 @@ const GATES = {
   },
   no_session: {
     title: "Open the link from a terminal",
-    body: () => "Run this command in a terminal and open the link it prints.",
+    body: () => "This tab has no session. Run this command in a terminal and open the link it prints.",
     command: "ordonnateur web url",
   },
   session_ended: {

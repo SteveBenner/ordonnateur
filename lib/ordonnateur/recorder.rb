@@ -18,13 +18,14 @@ module Ordonnateur
     def spawn_detached(record, script: script_path)
       return if ENV["ORDONNATEUR_RECORD_DISABLED"] == "1"
 
+      body = JSON.generate(record)
       reader, writer = IO.pipe
       pid = Process.spawn(script, "record", in: reader, out: File::NULL, err: File::NULL, pgroup: true)
       reader.close
-      writer.write(JSON.generate(record))
+      writer.write(body)
       writer.close
       Process.detach(pid)
-    rescue SystemCallError, IOError
+    rescue SystemCallError, IOError, JSON::JSONError
       nil
     end
 

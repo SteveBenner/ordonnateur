@@ -42,13 +42,20 @@ module Ordonnateur
       rescue JSON::ParserError
         nil
       end
-      execution =
-        if payload.nil? && Model::GUARD_EVENTS.include?(event)
-          failure(event, path, {}, "dispatch", "the #{event} payload is not a JSON object", clock)
-        else
-          execute(event, path, payload || {}, source: "dispatch")
-        end
-      out.puts JSON.generate(execution.stdout) if execution.stdout
+      serialized = nil
+      begin
+        execution =
+          if payload.nil? && Model::GUARD_EVENTS.include?(event)
+            failure(event, path, {}, "dispatch", "the #{event} payload is not a JSON object", clock)
+          else
+            execute(event, path, payload || {}, source: "dispatch")
+          end
+        serialized = JSON.generate(execution.stdout) if execution.stdout
+      rescue StandardError => e
+        serialized = nil
+        execution = failure(event, path, payload || {}, "dispatch", "the dispatcher could not process this event (#{e.class})", clock)
+      end
+      out.puts serialized if serialized
       err.puts execution.stderr if execution.stderr && !execution.stderr.empty?
       out.flush
       Recorder.spawn_detached(execution.record)
@@ -111,15 +118,15 @@ module Ordonnateur
       base[:command] = member["hook"]["command"]
       return base.merge(outcome: "skipped") if stopped
 
-      field = Model::MATCHER_FIELD[event]
-      if field && !Matcher.matches?(member["matcher"], payload[field])
-        return base.merge(outcome: "unmatched")
-      end
       unless Card.digest_ok?(member)
         return base.merge(outcome: "digest-mismatch") unless guard_event?(event)
 
         reason = "ordonnateur: #{member['id'].to_s.split(':').last} not run: card entry edited by hand, so #{event} is blocked; run ordonnateur lint"
         return base.merge(outcome: event == "PreToolUse" ? "deny" : "block", exit: 2, stderr: reason, raw_stderr: reason, raw_stdout: "")
+      end
+      field = Model::MATCHER_FIELD[event]
+      if field && !Matcher.matches?(member["matcher"], payload[field])
+        return base.merge(outcome: "unmatched")
       end
 
       result = Member.run(member["hook"], JSON.generate(current), timeout, env: env, cwd: cwd)
