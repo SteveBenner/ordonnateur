@@ -19,19 +19,26 @@ function readStoredToken() {
 }
 
 let sessionToken = readStoredToken();
+let tokenInStorage = true;
 
 export function setSessionToken(token) {
   sessionToken = token || null;
   try {
     if (sessionToken) window.sessionStorage.setItem(TOKEN_KEY, sessionToken);
     else window.sessionStorage.removeItem(TOKEN_KEY);
+    tokenInStorage = true;
   } catch (error) {
-    return;
+    tokenInStorage = false;
   }
+  return tokenInStorage;
 }
 
 export function hasSessionToken() {
   return sessionToken !== null;
+}
+
+export function isTokenInStorage() {
+  return tokenInStorage;
 }
 
 export const limiter = {

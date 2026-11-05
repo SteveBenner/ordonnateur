@@ -36,7 +36,7 @@ git clone https://github.com/SteveBenner/ordonnateur ~/.rplugins/ordonnateur
 ```
 
 Each release is tagged `vX.Y.Z`. To run a fixed release instead of the clone's current tree, pin its tag:
-`~/.rplugin/bin/rplugin install ~/.rplugins/ordonnateur --ref v0.2.17`; pinning an earlier tag is the rollback.
+`~/.rplugin/bin/rplugin install ~/.rplugins/ordonnateur --ref <tag>`; pinning an earlier tag is the rollback.
 rplugin does not install ordonnateur into Antigravity: Antigravity installs a plugin from a root `plugin.json`, and
 Codex prefers that file and then runs none of the plugin's hooks. ordonnateur still lists, lints, test-fires and
 orders Antigravity's hooks.

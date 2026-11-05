@@ -1,5 +1,6 @@
-import { get, post, del, endpoints, setSessionToken, hasSessionToken } from "./api.js";
+import { get, post, del, endpoints, setSessionToken, hasSessionToken, isTokenInStorage } from "./api.js";
 import { app } from "./store.js";
+import { toast } from "./announce.js";
 
 function clearHash() {
   try {
@@ -33,6 +34,11 @@ export async function loadConfig() {
   return config;
 }
 
+function openApp() {
+  app.set({ session: "active", cause: null, offline: false });
+  if (!isTokenInStorage()) toast("This tab could not store its session, so reloading it will end the session.", { kind: "error" });
+}
+
 async function exchange(code) {
   app.set({ session: "exchanging", cause: null });
   try {
@@ -48,7 +54,7 @@ async function exchange(code) {
     app.set({ session: gateForFailure(error, "session_ended"), cause: error.message });
     return false;
   }
-  app.set({ session: "active", cause: null, offline: false });
+  openApp();
   return true;
 }
 
@@ -61,7 +67,7 @@ async function probe() {
   try {
     await get(endpoints.session);
     await loadConfig();
-    app.set({ session: "active", cause: null, offline: false });
+    openApp();
     return true;
   } catch (error) {
     if (error.kind === "unauthorized") {
@@ -91,7 +97,8 @@ export async function endSession() {
   try {
     await del(endpoints.session);
   } finally {
-    setSessionToken(null);
-    app.set({ session: "session_ended", cause: "Signed out of this tab" });
+    const cleared = setSessionToken(null);
+    const cause = cleared ? "Signed out of this tab" : "Signed out of this tab. Close the tab to clear any stored session";
+    app.set({ session: "session_ended", cause });
   }
 }

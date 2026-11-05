@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.18] - 2026-11-05
+
+### Fixed
+
+- **A tab that could not store its `ordonnateur web` session gave no warning.** With `sessionStorage` blocked or full,
+  the session lived only in memory and the storage error was discarded, so a reload ended the session with no
+  explanation. The page now shows an error toast once the app opens, and the sign-out screen says to close the tab if
+  it could not clear the stored token. Measured in Chromium with storage forced to fail: no toast before, the toast
+  after, and none on a tab whose storage works.
+
+### Changed
+
+- The README's pinning example names `<tag>` rather than a version that goes stale with each release.
+
 ## [0.2.17] - 2026-11-04
 
 ### Fixed
