@@ -30,11 +30,18 @@ import * as keys from "../core/keys.js";
 import { allHooks, draftKeys, draftScopes, visibleHooks } from "../core/hooks.js";
 import { createSources, providersOf } from "../core/sources.js";
 import { queryParam } from "../core/query.js";
+import { attach } from "../core/runs.js";
 
 const PICK_FOLDER = "od:pick-folder";
 const SYNC_MS = 5000;
 const SYNC_BACKOFF_MS = 30000;
 const NARROW = 768;
+const SECTIONS = [
+  { id: "hooks", label: "Hooks" },
+  { id: "health", label: "Health" },
+  { id: "plan", label: "Plan" },
+  { id: "settings", label: "Settings" },
+];
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -66,6 +73,14 @@ function projectItems(projects) {
   return items;
 }
 
+function validSection(value) {
+  return SECTIONS.some((item) => item.id === value) ? value : null;
+}
+
+function bootSection() {
+  return validSection(queryParam("section")) || validSection(getPref("section", null)) || "hooks";
+}
+
 function bootView() {
   const value = queryParam("view");
   return value === "list" || value === "map" ? value : null;
@@ -75,6 +90,11 @@ class OdAppShell extends HTMLElement {
   registerView(view) {
     this.viewModule = view;
     if (this.mounted) this.mountView();
+  }
+
+  registerSections(modules) {
+    this.sectionModules = modules;
+    if (this.topbar) this.showSection();
   }
 
   connectedCallback() {
@@ -90,6 +110,10 @@ class OdAppShell extends HTMLElement {
     this.notesOpen = false;
     this.mounted = false;
     this.viewHandle = null;
+    this.sectionModules = this.sectionModules || {};
+    this.sectionHandles = {};
+    this.sectionPanes = {};
+    this.section = bootSection();
     this.project = getPref("project", null);
     this.harness = getPref("harness", "both");
     this.density = getPref("density", "detailed");
@@ -110,6 +134,9 @@ class OdAppShell extends HTMLElement {
     this.addEventListener("od-retry", this.onRetry);
     this.onDraft = () => this.renderBanners();
     document.addEventListener("od-draft-change", this.onDraft);
+    this.onHeals = () => this.reloadKeepingDraft();
+    document.addEventListener("od-heals-applied", this.onHeals);
+    this.addEventListener("od-goto-section", (event) => this.setSection(event.detail.section, { focus: true }));
     this.start();
   }
 
@@ -119,6 +146,7 @@ class OdAppShell extends HTMLElement {
     if (this.unregister) this.unregister();
     document.removeEventListener("visibilitychange", this.onVisibility);
     document.removeEventListener("od-draft-change", this.onDraft);
+    document.removeEventListener("od-heals-applied", this.onHeals);
     clearTimeout(this.syncTimer);
   }
 
@@ -161,8 +189,18 @@ class OdAppShell extends HTMLElement {
 
     this.toolbar = el("div", "od-toolbar");
     const toolLeft = el("div", "od-group od-group-start");
-    const title = el("h1", "od-title", "Hooks");
-    title.tabIndex = -1;
+    this.sectionTitle = el("h1", "od-title visually-hidden", "Hooks");
+    this.sectionTitle.tabIndex = -1;
+    this.sectionTabs = document.createElement("od-tabs");
+    this.sectionTabs.className = "od-section-tabs";
+    this.sectionTabs.setAttribute("label", "Sections");
+    for (const item of SECTIONS) {
+      const panel = el("span");
+      panel.dataset.tab = item.id;
+      panel.dataset.label = item.label;
+      this.sectionTabs.append(panel);
+    }
+    this.sectionTabs.setAttribute("selected", this.section);
     this.viewControl = segmented(
       "View",
       [
@@ -171,7 +209,7 @@ class OdAppShell extends HTMLElement {
       ],
       this.view,
     );
-    toolLeft.append(title, this.viewControl);
+    toolLeft.append(this.sectionTitle, this.sectionTabs, this.viewControl);
     const toolRight = el("div", "od-group od-group-end");
     this.densityControl = segmented(
       "Density",
@@ -200,7 +238,8 @@ class OdAppShell extends HTMLElement {
     this.viewHost = el("div", "od-view");
     this.inspectorHost = el("div", "od-inspector-host");
     this.inspectorHost.hidden = true;
-    this.main.append(this.viewHost, this.inspectorHost);
+    this.sectionHost = el("div", "od-sections");
+    this.main.append(this.viewHost, this.sectionHost, this.inspectorHost);
     this.trayHost = el("div", "od-tray-host");
     this.trayHost.hidden = true;
     this.toaster = document.createElement("od-toaster");
@@ -219,6 +258,7 @@ class OdAppShell extends HTMLElement {
       setPref("harness", this.harness);
       this.pushContext();
     });
+    this.sectionTabs.addEventListener("od-tab-change", (event) => this.setSection(event.detail.id, { focus: false }));
     this.viewControl.addEventListener("od-change", (event) => this.setView(event.detail.value));
     this.densityControl.addEventListener("od-change", (event) => this.setDensity(event.detail.value));
     this.emptyToggle.addEventListener("od-change", (event) => this.setEmpty(event.detail.checked));
@@ -233,7 +273,16 @@ class OdAppShell extends HTMLElement {
   }
 
   syncChrome() {
-    this.densityControl.hidden = this.view !== "map";
+    const hooks = this.section === "hooks";
+    this.dataset.section = this.section;
+    this.viewControl.hidden = !hooks;
+    this.densityControl.hidden = !hooks || this.view !== "map";
+    this.emptyToggle.hidden = !hooks;
+    this.harnessControl.hidden = this.section === "plan" || this.section === "settings";
+    this.projectControl.hidden = this.section === "settings";
+    this.viewHost.hidden = !hooks;
+    this.sectionHost.hidden = hooks;
+    this.sectionTitle.textContent = SECTIONS.find((item) => item.id === this.section).label;
     const labels = { synced: "In sync", changed: "Changed on disk", offline: "Offline" };
     this.syncEl.dataset.state = this.syncState;
     this.syncText.textContent = labels[this.syncState];
@@ -241,6 +290,9 @@ class OdAppShell extends HTMLElement {
 
   registerKeys() {
     const offs = [
+      ...SECTIONS.map((item, index) =>
+        keys.register({ keys: String(index + 1), description: `Show ${item.label}`, group: "Sections", handler: () => this.setSection(item.id, { focus: true, announce: true }) }),
+      ),
       keys.register({ keys: "m", description: "Show the map", group: "View", handler: () => this.setView("map", true) }),
       keys.register({ keys: "l", description: "Show the list", group: "View", handler: () => this.setView("list", true) }),
       keys.register({ keys: "d", description: "Toggle density", group: "View", handler: () => this.setDensity(this.density === "compact" ? "detailed" : "compact", true) }),
@@ -260,6 +312,57 @@ class OdAppShell extends HTMLElement {
     const scopes = draftScopes(this.project);
     if (scopes.length !== 1) return;
     document.dispatchEvent(new CustomEvent("od-open-plan", { detail: { scope: scopes[0], project: this.project } }));
+  }
+
+  setSection(id, options = {}) {
+    if (!validSection(id)) return;
+    const changed = id !== this.section;
+    this.section = id;
+    if (changed) setPref("section", id);
+    if (this.sectionTabs.value !== id) this.sectionTabs.setAttribute("selected", id);
+    this.syncChrome();
+    this.syncBar();
+    this.showSection();
+    this.linkTabs();
+    if (changed) {
+      const label = SECTIONS.find((item) => item.id === id).label;
+      announce(`${label} section`);
+    }
+    if (options.focus) this.sectionTitle.focus();
+  }
+
+  linkTabs() {
+    for (const tab of this.sectionTabs.querySelectorAll("[role=tab]")) tab.setAttribute("aria-controls", "main");
+  }
+
+  showSection() {
+    if (!this.sectionHost) return;
+    const id = this.section;
+    if (id !== "hooks" && this.sectionModules[id] && !this.sectionHandles[id]) {
+      const pane = el("div", "od-section-pane");
+      pane.dataset.section = id;
+      this.sectionHost.append(pane);
+      this.sectionPanes[id] = pane;
+      this.sectionHandles[id] = this.sectionModules[id].mount(pane, this.sectionContext(id));
+    }
+    for (const [name, pane] of Object.entries(this.sectionPanes)) pane.hidden = name !== id;
+    this.pushSections();
+  }
+
+  sectionContext(id) {
+    return {
+      config: app.get().config,
+      projects: this.projects,
+      harness: this.harness,
+      project: this.project,
+      readOnly: Boolean(app.get().config && app.get().config.read_only),
+      active: this.section === id,
+      section: id,
+    };
+  }
+
+  pushSections() {
+    for (const [id, handle] of Object.entries(this.sectionHandles)) handle.update(this.sectionContext(id));
   }
 
   setView(value, focus) {
@@ -308,6 +411,7 @@ class OdAppShell extends HTMLElement {
     this.project = path;
     setPref("project", path);
     this.changedOnDisk = false;
+    this.pushSections();
     await this.loadProjects();
     this.projectControl.value = path;
     this.loadLayout(true);
@@ -320,6 +424,7 @@ class OdAppShell extends HTMLElement {
     this.project = next;
     setPref("project", next);
     this.changedOnDisk = false;
+    this.pushSections();
     this.loadLayout(true);
   }
 
@@ -334,7 +439,7 @@ class OdAppShell extends HTMLElement {
     this.sourceBar.providers = state.providers;
     this.sourceBar.off = state.hidden;
     this.sourceBar.removeAttribute("data-pending");
-    this.sourceBar.hidden = !state.active;
+    this.sourceBar.hidden = !state.active || this.section !== "hooks";
   }
 
   counts(state) {
@@ -418,6 +523,10 @@ class OdAppShell extends HTMLElement {
     }
     this.renderBanners();
     this.renderLoading();
+    attach();
+    this.syncChrome();
+    this.showSection();
+    this.linkTabs();
     await this.loadProjects();
     await this.loadLayout(false);
     this.scheduleSync(this.syncDelay);
@@ -438,6 +547,7 @@ class OdAppShell extends HTMLElement {
       this.projectControl.options = projectItems(this.projects);
     }
     this.projectControl.value = this.project || "none";
+    this.pushSections();
   }
 
   renderLoading() {
@@ -499,6 +609,7 @@ class OdAppShell extends HTMLElement {
   pushContext() {
     this.syncBar();
     if (this.viewHandle) this.viewHandle.update(this.context());
+    this.pushSections();
   }
 
   setSync(state) {

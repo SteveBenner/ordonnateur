@@ -10,7 +10,9 @@ purpose: >
   an apply recomputes the plan and writes only when nothing moved since. The
   app has no database: it reads the files ordonnateur already reads and writes
   through the same Takeover, HermesOrder and AntigravityOrder code as the command line. Codex stays read-only.
-  The app ships in the plugin; hosting under a supervisor is the host's
+  It also runs `untangle` and `plan` for the person at the browser and changes the four settings those verbs read,
+  through the same Untangle, SetupPlan and settings code as the command line, under the rules of
+  specs/untangle-plan.yml. The app ships in the plugin; hosting under a supervisor is the host's
   business, never the plugin's.
 
 command:
@@ -139,9 +141,47 @@ routes:
       - "applicable false answers 422 with its blocked_reason; a warn or deny is never applied from the web."
       - "Takeover#apply: backup, settings sha recheck (SettingsChanged answers 409 plan_changed), atomic writes keeping each file's mode, ordonnateur.card.applied events with via web."
     answers: "200 {plan_id, applied: true, files: [written paths], backups: [backup paths], fingerprint: {config, timings}}"
+  "GET /api/v1/health":
+    query: "project=<root> optional; harness=all|claude-code|codex|hermes|antigravity optional, default all"
+    answers: "{dimensions, findings, unmapped_codes, heal_mode: off|plan|auto, heal_locked_by: null|env name}. The same redacted facts as `untangle --json`, with no model, no heal, and no write. Opening a page never heals, whatever untangle.heal says."
+    read_only: "A read: allowed on a --read-only server."
+  "POST /api/v1/runs":
+    body: "{verb: untangle|plan, project: <root>|null, model: bool, harness?, heal?: none|preview|apply, answers?: {goal, harnesses, unattended, constraint}, interview?: saved|skip, scope?: user|local}"
+    untangle: "Runs Untangle with the same options as the command line: model false is --no-model, heal preview lists every plan and writes nothing, even under auto, and heal apply is --heal --apply. heal none with untangle.heal auto is a plain untangle, so it applies the safe healers, as the contract says, and the page says so before the person runs it."
+    plan: "Runs SetupPlan. answers saves them as the profile, like --answers. interview skip is --no-interview, and interview saved uses the saved profile. No answers, no saved profile, and no skip answers 422 answers_needed. scope is --scope, default user; local needs project. model false is --no-model."
+    answers: "202 {run_id, verb, status: running, started_at}. 409 run_active with run_id while any run is active. 403 disabled when web.enabled resolves false. 422 invalid for an unknown verb, option, or harness, or for a heal the setting forbids."
+    execution: "One background thread per run, one active run in the process. A run holds the apply lock only while it writes. Model limits stay those of the advisor, so a run ends on its own."
+  "GET /api/v1/runs":
+    answers: "{active: <run>|null, latest: {untangle: <run id>|null, plan: <run id>|null}}, so a reloaded page finds its run again."
+  "GET /api/v1/runs/{id}":
+    answers: "{run_id, verb, status: running|done|failed, started_at, finished_at, exit, report, error}. report is the parsed --json output of the verb, already redacted. error is a plain message, and a failure that is not an ordonnateur error is logged and answers `internal error`. 404 not_found for an unknown or expired run."
+    retention: "Runs live in server memory, the newest 20 and 1 hour each. An active run is never dropped."
+  "GET /api/v1/proposals":
+    query: "project=<root> optional"
+    answers: "{questions, profile: {answers, at}|null, proposals: [proposal of the newest batch for this project], applied: {proposal id: at}}"
+  "POST /api/v1/proposals":
+    body: "{proposals: [proposal], project: <root>|null, scope?: user|local}"
+    effect: "--proposals for a person who pasted what an agent wrote: validates and stores under the same rules. 201 {stored, refused}."
+  "POST /api/v1/proposals/apply":
+    body: "{ids: [proposal id], project: <root>|null, allow_widening?: bool, confirm?: <proposal id>}"
+    rules: "Each id applies through SetupPlan's apply path, with its diff, policy judgment, backup, and compare-and-swap. allow_widening needs exactly one id and confirm equal to it, else 422 confirm_required. 403 disabled when web.enabled resolves false. A warn or deny refuses that proposal."
+    answers: "200 {applied: [{id, status, code, reason, diff, backups}]}"
+  "GET /api/v1/settings":
+    answers: "{settings: [{key, type, options, value, default, layer, description, locked_by: null|env name}], extension_available: bool}. Only untangle.heal, advisor.backend, advisor.harness, and advisor.model."
+  "PUT /api/v1/settings/{key}":
+    body: "{value, confirm?}"
+    rules: "Only the four keys above; any other key answers 404 not_found, so web.* and run.* can't change from a browser. untangle.heal auto needs confirm equal to auto, else 422 confirm_required. advisor.model must match ^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$, else 422 invalid. A key whose kill switch is set answers 422 locked. The policy port judges a write of the settings file first, and a warn or deny answers 422 policy_warn or policy_deny. 403 disabled when web.enabled resolves false."
+    answers: "200 {key, value, layer, from}"
+  "DELETE /api/v1/settings/{key}":
+    rules: "Resets a key to its default, under the same key, lock, policy, and disabled rules. Resetting needs no confirm, because no default turns on healing."
   static: "GET / serves web/public/index.html; other paths serve web/public files."
 
 browser:
+  sections: "Tabs for Hooks, Health, Plan, and Settings replace the page title. Hooks keeps Map and List, the sources bar, drafts, and plans as they are. The choice is kept under the pref `section`, and `?section=hooks|health|plan|settings` starts on one without writing the pref. Keys 1 to 4 switch sections. The project combobox applies to Hooks, Health, and Plan; the harness control applies to Hooks and Health."
+  health: "A strip of eight dimensions, each a button with its status in words and its finding count, filters the findings table. A model assessment appears only after a run and is labeled as judged by a model. A heal is previewed in a drawer with its diff and applied only by the person pressing Apply; when the heals include one that isn't safe, Apply also needs the word heal typed."
+  plan: "A rail holds the four goal questions, all optional, and the run options: scope, and model or facts only. Run plan is always available; fields left empty mean skip, and emptying saved answers replaces them rather than reusing them. Each answered field has a visible Clear. Proposals list beside it with what each serves, its diff or instructions, and Apply for an apply proposal. A proposal that widens access is labeled, and needs its id typed. Facts only shows the prompt to copy for an agent, and a field takes the proposals that agent wrote."
+  settings: "Four rows: untangle.heal, advisor.backend, advisor.harness, and advisor.model, each with its current source and a reset. Choosing auto needs the word auto typed. A kill switch locks its row, shows the source chip Locked, and names the switch in the row's hint."
+  runs: "A run shows its elapsed time and survives a reload. Running and heal-applying controls are disabled with the reason on a read-only server."
   project_selector: "The project combobox lists Global Shelf (no project, the default and the input text when none is chosen or registered) pinned first with an accent rail and tint, Select a Folder... in the warn colour under it, a separator, then the projects. Typing filters only the projects. Select a Folder... opens the in-app folder picker (selectable=folder, the rui-hub composite.form.file-picker props), which reads GET /api/v1/folders; confirming pins the folder through PUT /api/v1/state/projects, selects it and loads its hooks. The folder_picker port is declared in the manifest; its local rui-hub extension reports source rui-hub only when rui-hub serves the built component script, which today it does not, so source is standalone."
   sources: "A provider is one source row of one harness (claude-code:user, codex:user, hermes:user, claude-code:plugin:<id>, and so on). The toolbar shows one colored toggle per provider when two or more are visible; each provider keeps a fixed color per theme. Switching one off hides its hooks in the matrix and the list; drafts, plans and order numbers keep reading the full layout. The off set is kept in the browser under the pref `sources`; everything is on by default and a provider seen for the first time appears on. Show all is offered while any provider is off and Hide all while any provider is on; Hide all switches every provider off and announces it. Hovering or focusing a toggle highlights that provider's cards and row header in the matrix and its rows in the list (data-hot). A provider that is off hides every one of its rows in the list too, card members and natives of an edited scope included. A matrix row name is never truncated: it wraps, breaking first after @ and ·; the path under it may clip. Matrix columns size to their widest hook card, with a minimum of --col-w (--col-w-compact in compact density), and a card never truncates or wraps its text."
   sort: "Every list column but Actions is a sort button. A sort reorders rows inside each event group and never moves the groups or changes the matrix. The default is # ascending, execution order; # restores it from any other sort. Clicking the active column flips its direction; another column starts ascending for #, Hook, Source and Status and descending for Findings (severity, then count), p95 and Timeout. Missing values sort last in both directions and ties keep execution order. Order badges always show execution positions. The active th carries aria-sort, the change is announced, and the choice is kept in the browser under the pref `sort` as {key, dir}."
@@ -150,5 +190,6 @@ browser:
 events:
   - { name: ordonnateur.web, fields: "event start|stop, bind, port, read_only", when: "server start and stop" }
   - { name: ordonnateur.card.applied, fields: "existing fields plus via: cli|web", when: "every applied event change" }
+  - { name: "ordonnateur.heal.applied, ordonnateur.heal.skipped, ordonnateur.heal.rolled_back, ordonnateur.plan.applied", fields: "as in specs/untangle-plan.yml", when: "a run or apply from the browser, through the same code as the command line" }
 
-agents: "The web app is for the person at the browser. An agent never drives its API; when it wants the person to change hook order it gives them the `ordonnateur order` plan or points them to `ordonnateur web`. Every write the app makes is still judged by the policy port first."
+agents: "The web app is for the person at the browser. An agent never drives its API, and that holds for runs, heals, proposals, and settings too; when it wants the person to change hook order it gives them the `ordonnateur order` plan or points them to `ordonnateur web`. Every write the app makes is still judged by the policy port first."

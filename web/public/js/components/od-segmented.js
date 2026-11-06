@@ -9,7 +9,8 @@ class OdSegmented extends HTMLElement {
     this.addEventListener("keydown", (event) => this.onKey(event));
     this.addEventListener("click", (event) => {
       const segment = event.target.closest("[role=radio]");
-      if (segment && !this.hasAttribute("disabled")) this.select(segment.dataset.value, true);
+      if (!segment || this.hasAttribute("disabled") || segment.getAttribute("aria-disabled") === "true") return;
+      this.select(segment.dataset.value, true);
     });
     this.group = true;
     this.render();
@@ -65,6 +66,11 @@ class OdSegmented extends HTMLElement {
       segment.setAttribute("aria-checked", selected ? "true" : "false");
       segment.tabIndex = selected || (!has && index === 0) ? 0 : -1;
       segment.textContent = item.label;
+      if (item.disabled) {
+        segment.setAttribute("aria-disabled", "true");
+        if (item.reason) segment.title = item.reason;
+      }
+      if (item.describedby) segment.setAttribute("aria-describedby", item.describedby);
       this.append(segment);
     });
   }
@@ -82,12 +88,20 @@ class OdSegmented extends HTMLElement {
     const segments = [...this.querySelectorAll("[role=radio]")];
     const index = segments.indexOf(document.activeElement);
     if (index < 0) return;
+    const enabled = (node) => node.getAttribute("aria-disabled") !== "true";
+    const step = (from, delta) => {
+      for (let count = 1; count <= segments.length; count += 1) {
+        const at = (from + delta * count + segments.length * count) % segments.length;
+        if (enabled(segments[at])) return at;
+      }
+      return -1;
+    };
     let next = -1;
-    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % segments.length;
-    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index - 1 + segments.length) % segments.length;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = segments.length - 1;
-    if (next < 0) return;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = step(index, 1);
+    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = step(index, -1);
+    else if (event.key === "Home") next = segments.findIndex(enabled);
+    else if (event.key === "End") next = segments.length - 1 - [...segments].reverse().findIndex(enabled);
+    if (next < 0 || next >= segments.length) return;
     event.preventDefault();
     this.select(segments[next].dataset.value, true);
   }

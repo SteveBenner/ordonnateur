@@ -279,4 +279,11 @@ export const endpoints = {
   plans: "/plans",
   plan: (id) => `/plans/${enc(id)}`,
   apply: (id) => `/plans/${enc(id)}/apply`,
+  health: (params) => `/health${query(params)}`,
+  runs: "/runs",
+  run: (id) => `/runs/${enc(id)}`,
+  proposals: (params) => `/proposals${query(params)}`,
+  proposalsApply: "/proposals/apply",
+  settings: "/settings",
+  setting: (key) => `/settings/${enc(key)}`,
 };

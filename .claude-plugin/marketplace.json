@@ -3,13 +3,13 @@
   "owner": {
     "name": "ordonnateur"
   },
-  "description": "Puts each harness event's hooks in the order you choose, and lists, lints, times and test-fires every hook.",
+  "description": "Puts each harness event's hooks in the order you choose, lists, lints, times and test-fires every hook, and checks, heals and tunes an agent setup.",
   "plugins": [
     {
       "name": "ordonnateur",
       "source": "./",
-      "description": "Puts each harness event's hooks in the order you choose, and lists, lints, times and test-fires every hook.",
-      "version": "0.2.18"
+      "description": "Puts each harness event's hooks in the order you choose, lists, lints, times and test-fires every hook, and checks, heals and tunes an agent setup.",
+      "version": "0.4.0"
     }
   ]
 }

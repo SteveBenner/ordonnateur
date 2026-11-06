@@ -3,7 +3,7 @@
 > **AI agents:** read [`AGENTS.md`](AGENTS.md) first.
 
 A plugin built on [rplugin](https://github.com/SteveBenner/rplugin). ordonnateur puts each harness event's hooks in
-the order you choose, and lists, lints, times and test-fires every hook.
+the order you choose, lists, lints, times and test-fires every hook, and checks, heals and tunes your agent setup.
 
 [![The ordonnateur web app's map view: every Claude Code and Codex hook laid out by source and event, with guards and policy-protected hooks locked and each hook's trust status, matcher, timeout and p95](assets/ordonnateur-web.png)](assets/ordonnateur-web.png)
 
@@ -73,8 +73,13 @@ session-start watch hook once (`hermes hooks`); ordonnateur never writes Hermes'
 - `ordonnateur run claude-code <Event> --card <path>` is the dispatcher hook; `ordonnateur record` stores a run.
 - `ordonnateur web [--bind ADDR] [--port N] [--public-origin URL] [--expose] [--open] [--read-only] [--json]` serves
   the web app; `ordonnateur web url` prints a fresh one-time link for the running server.
+- `ordonnateur untangle [--harness H] [--project DIR] [--heal] [--apply] [--no-model] [--json]` reports hook health and
+  can heal a fixed set of flaws; see [Untangle and plan](#untangle-and-plan).
+- `ordonnateur plan [--project DIR] [--answers FILE] [--questions] [--reinterview] [--no-interview] [--proposals FILE] [--apply IDS] [--scope user|local] [--allow-widening] [--no-model] [--json]`
+  offers changes that serve your goals.
 
-Every changing command prints the plan, every refusal and a unified diff, and writes nothing without `--apply`.
+Every changing command prints the plan, every refusal and a unified diff, and writes nothing without `--apply`. The
+one exception is `untangle` with `untangle.heal` set to `auto`, which you opt in to.
 With `--apply` the policy port judges a write of each target file first, a backup goes to
 `${XDG_STATE_HOME:-~/.local/state}/rplugin/ordonnateur/backups/`, and the write aborts with exit 3 when the
 settings file changed meanwhile.
@@ -144,6 +149,37 @@ Antigravity hook order only through plans. It reads the same files the command l
 State lives under `${XDG_STATE_HOME:-~/.local/state}/rplugin/ordonnateur/web/`: the launch secret, `server.json`,
 `server.log` and the pinned projects. The browser keeps only the theme, view preferences and unsent drafts.
 
+## Untangle and plan
+
+Deterministic code gathers every fact and performs every write. A model explains, ranks and proposes, and its answer is
+validated before anything uses it. The contract is `specs/untangle-plan.yml`.
+
+- **`untangle`** rates eight dimensions as healthy, watch or unhealthy: liveness, correctness, duplication, ordering,
+  latency, safety, integrity and freshness. It exits 1 on any warning or error.
+- **Healing** follows `untangle.heal`. `off` (the default) only reports. `plan` shows heal plans, and `--heal --apply`
+  applies them. `auto` also applies the safe healers on each run: add an escaped hook to its sequence, drop a matcher
+  Claude Code ignores, and drop a local copy of a handler that's identical in user settings. Removing a hook whose
+  program doesn't exist always needs `--heal --apply`. Healing never touches guard-event, plugin, project or managed
+  hooks, Codex files or Hermes's allowlist. A heal that leaves a new failing finding is rolled back. `ORDONNATEUR_HEAL_DISABLED=1`
+  behaves as `off`.
+- **`plan`** asks up to four short questions and saves your answers. On a terminal it asks in place; otherwise
+  `--questions` prints them and `--answers FILE` takes the replies as JSON. Each proposal is either an `apply`, for an
+  allowlisted Claude Code setting (`permissions.allow`, `ask`, `deny`, `additionalDirectories`, `env`, `model`,
+  `effortLevel`, `enabledPlugins` or `cleanupPeriodDays`), or a `suggest`, which is exact instructions for you. Hooks,
+  `permissions.defaultMode` and whole-tool permission wildcards are always refused. Applying is never automatic, and
+  a proposal that widens access also needs `--allow-widening`. Read each diff: a model can be wrong about a change it
+  proposes, and it never sees your env values.
+- **The model** comes from `advisor.backend`. `harness` (the default) runs `advisor.harness` (`claude` or `codex`) with
+  `advisor.model`, no tools and none of your hooks. `extension` uses the `author` port of a fleet extension, which is
+  rLLM on rStack hosts. `--no-model` prints the facts and the prompt, so the agent running the command can act as the
+  model. Before any model sees your setup, env values, MCP headers, URL queries and secret-shaped text are removed. If
+  the model is off or fails, the measured findings still print. `ORDONNATEUR_ADVISOR_DISABLED=1` turns it off.
+- **The Régisseur agent** (`agents/regisseur.md`) runs both verbs for you and applies only what you approve. An agent
+  never changes `untangle.heal` or the `advisor.*` settings.
+- **In the browser**, `ordonnateur web` offers all of this under Health, Plan, and Settings. Opening a page never heals
+  and calls no model. Run, Apply, and setting changes pass the same policy judgment as the command line, and a
+  `--read-only` server disables them.
+
 ## The guard rule
 
 ordonnateur never absorbs a guard: a PreToolUse, UserPromptSubmit or PreCompact hook not in the card's unguarded
@@ -169,7 +205,8 @@ that use the powershell shell are not absorbed, and neither is any hook while ma
 ## Settings
 
 `run.record` (kill switch `ORDONNATEUR_RECORD_DISABLED`), `lint.slow_ms`, `watch.enabled` (kill switch
-`ORDONNATEUR_WATCH_DISABLED`), `alerts.failures` and `events.runs`; for the web app, `web.enabled` (kill switch
+`ORDONNATEUR_WATCH_DISABLED`), `alerts.failures` and `events.runs`; for `untangle` and `plan`, `untangle.heal`,
+`advisor.backend`, `advisor.harness` and `advisor.model`; for the web app, `web.enabled` (kill switch
 `ORDONNATEUR_WEB_DISABLED`), `web.bind`, `web.port` (default 7422), `web.public_origin`, `web.theme`, `web.projects`
 (colon-separated project roots) and `web.discover`. `ordonnateur web` loads the WEBrick copy in `vendor/webrick`
 (Ruby and BSD-2-Clause licenses, see `vendor/VERSIONS.yml`); no other command does.

@@ -36,7 +36,7 @@ od-text-field .od-box {
   border-color: var(--text-dim);
 }
 
-:is(od-text-field, od-textarea) .od-box:has(.od-native:focus) {
+:is(od-text-field, od-textarea) .od-box:has(:is(input, textarea).od-native:focus) {
   border-color: var(--focus-ring);
   outline: var(--focus-w) solid var(--focus-ring);
   outline-offset: 0;
@@ -118,4 +118,16 @@ od-text-field .od-box {
   :is(od-text-field, od-textarea, od-combobox, od-confirm) .od-native.mono {
     font-size: var(--text-lg);
   }
+}
+
+od-text-field[multiline] .od-box {
+  align-items: stretch;
+  height: auto;
+  padding-block: var(--space-1);
+}
+
+od-text-field[multiline] .od-native {
+  height: auto;
+  min-height: 96px;
+  resize: vertical;
 }

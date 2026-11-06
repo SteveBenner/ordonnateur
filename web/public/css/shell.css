@@ -339,3 +339,58 @@ od-session-gate .od-actions {
     padding-inline: var(--space-2);
   }
 }
+
+.od-section-tabs {
+  flex: none;
+  min-width: 0;
+}
+
+.od-section-tabs > .od-tablist {
+  contain: none;
+  overflow: visible;
+  border-bottom: 0;
+}
+
+@media (max-width: 699px) {
+  od-app-shell[data-section="hooks"] > .od-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "start" "end" "sources";
+  }
+
+  od-app-shell[data-section="hooks"] > .od-toolbar .od-group-end {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 599px) {
+  od-app-shell:not([data-section="hooks"]) > .od-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "start end";
+  }
+
+  od-app-shell:not([data-section="hooks"]) > .od-toolbar .od-group-end {
+    justify-self: end;
+  }
+}
+
+.od-section-tabs > .od-tablist > .od-native {
+  padding-inline: var(--space-2);
+}
+
+.od-section-tabs > [role="tabpanel"] {
+  display: none;
+}
+
+od-app-shell .od-sections {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+od-app-shell:not([data-section="hooks"]) .od-inspector-host {
+  display: none;
+}
+
+od-app-shell:not([data-section="hooks"]) > .od-main[data-inspector="open"] {
+  grid-template-columns: minmax(0, 1fr);
+}

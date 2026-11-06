@@ -1,4 +1,4 @@
-@layer reset, tokens, themes, base, components, shell, list, matrix, panels;
+@layer reset, tokens, themes, base, components, shell, list, matrix, panels, sections;
 
 @import url("reset.css") layer(reset);
 @import url("tokens.css") layer(tokens);
@@ -32,6 +32,7 @@
 @import url("list.css") layer(list);
 @import url("views/matrix.css") layer(matrix);
 @import url("views/panels.css") layer(panels);
+@import url("views/sections.css") layer(sections);
 
 @media (prefers-reduced-motion: reduce) {
   :where(html) :where(*, *::before, *::after) {

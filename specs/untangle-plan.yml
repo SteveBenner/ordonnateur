@@ -1,0 +1,147 @@
+schema_version: 1
+name: ordonnateur.untangle-plan
+version: 1
+kind: contract
+purpose: >
+  untangle judges the health of a host's hook configurations and can heal a fixed set of flaws. plan reads the
+  whole agent setup, asks the user a few questions, and offers changes that serve the stated goals. Deterministic code
+  gathers every fact and performs every write. A model explains, ranks, and proposes, and never decides what is
+  written by itself.
+
+advisor:
+  meaning: The one path to a model for both verbs.
+  settings:
+    advisor.backend: "harness (default) runs a harness CLI with no tools. extension uses the author port, which a fleet extension backs; on rStack hosts that is rLLM through the rstack extension."
+    advisor.harness: "claude (default) or codex, used by the harness backend."
+    advisor.model: "Model name passed to the harness CLI, default sonnet. The extension backend picks its own. A value that doesn't match ^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$ is refused, so it can never read as a flag."
+  kill_switch: ORDONNATEUR_ADVISOR_DISABLED=1 makes both verbs run with no model and say so.
+  no_model_flag: "--no-model prints the facts and the prompt, so the agent running the command acts as the model."
+  extension_absent: With advisor.backend extension and no extension adapter, the verb reports that and runs with no model. It never silently falls back to the harness backend.
+  failure: A model that is off, fails, times out, or returns unusable text never hides deterministic findings. The verb prints them and says the model part is missing.
+  limits:
+    timeout_s: 180
+    attempts: 2
+    retry_backoff: full jitter between 1 and 4 seconds
+    concurrent_calls: 1, through a lock file under the state home; a second caller waits at most 5 seconds and then runs with no model
+    turns_per_minute: 10, counted in the state home
+    packet_bytes: 60000
+  harness_process:
+    tools: none
+    mcp: none
+    cwd: a new private temporary directory
+    hooks: must not run the user's hooks, so verification proves no user hook fires
+    prompt: through stdin, never argv
+    forbidden: any flag that starts with --dangerously
+    nested: ORDONNATEUR_NESTED=1 is set in the child, and either verb refuses the model when it is already set
+  untrusted_input: Hook commands, script names, and settings values are data. The prompt labels them as untrusted, and a model answer is parsed as JSON and validated against known ids and allowed shapes before use.
+
+redaction:
+  meaning: Applied to everything before a model or a --no-model packet sees it.
+  rules:
+    - Env values are dropped, and only env names are kept.
+    - MCP server env values, headers, and URL query strings are dropped.
+    - A key whose name contains token, secret, password, passphrase, credential, cookie, auth, or key has its value replaced with [redacted].
+    - In a command, an inline NAME=value assignment keeps the name and drops the value, and flags that look like --token value or --password=value are masked.
+    - Text shaped like a bearer token, a provider API key, or a hex or base64 run of 32 or more characters is masked.
+    - The home directory is written as ~.
+
+untangle:
+  command: "ordonnateur untangle [--harness H] [--project DIR] [--heal] [--apply] [--no-model] [--json]"
+  dimensions: [liveness, correctness, duplication, ordering, latency, safety, integrity, freshness]
+  dimension_status: "healthy when no finding, watch when only info findings, unhealthy on any warn or error."
+  lint_codes_by_dimension:
+    liveness: [ORD-DEAD, ORD-EVENT, ORD-CODEX-DISABLED, ORD-CODEX-UNTRUSTED, ORD-HERMES-UNALLOWLISTED, ORD-AG-DISABLED, ORD-AG-SKIPPED, ORD-AG-NOHOOKS, ORD-HERMES-EVENT, ORD-AG-EVENT]
+    correctness: [ORD-MATCHER, ORD-HERMES-MATCHER-IGNORED, ORD-HERMES-FAILCLOSED-IGNORED, ORD-HERMES-ENV, ORD-AG-MATCHER, ORD-AG-MATCHER-IGNORED, ORD-AG-CLAUDE-TOOL, ORD-AG-PROMPT, ORD-RUN-FAILING]
+    duplication: [ORD-DUP, ORD-TWIN, ORD-HERMES-DUP, ORD-AG-DUPNAME, ORD-CODEX-BOTH]
+    ordering: [ORD-ESCAPED, ORD-AG-RANDOM-ORDER]
+    latency: [ORD-SLOW, ORD-NEARTIMEOUT, ORD-SESSIONEND, ORD-HERMES-TIMEOUT, ORD-AG-TIMEOUT, ORD-EVENT-LOAD, ORD-GUARD-NO-TIMEOUT]
+    safety: [ORD-PROTECTED, ORD-MANAGED-ONLY, ORD-HOOK-WRITABLE, ORD-GUARD-ASYNC, ORD-GUARD-MASKED]
+    integrity: [ORD-CARD, ORD-CARD-DIGEST, ORD-CODEX-TOML, ORD-HERMES-BADENTRY, ORD-HERMES-ALLOWLIST, ORD-AG-NOTJSON, ORD-AG-LEDGER, ORD-CONFIG-NOTE]
+    freshness: [ORD-CODEX-STALE-TRUST, ORD-HERMES-STALE-CONSENT, ORD-PLUGIN-PATH]
+  unknown_code_rule: A lint code missing from this map lands in integrity, and the verb lists it as unmapped, so a new lint code cannot vanish from the report.
+  new_checks:
+    ORD-HOOK-WRITABLE: { severity: warn, meaning: "The hook's program is world-writable, group-writable by a group other than the user's own private group, or owned by another non-root user, so someone else can change what runs. One finding per program." }
+    ORD-GUARD-ASYNC: { severity: info, meaning: "A hook on a guard event runs async, so it cannot block. Observers do this on purpose, so it is info." }
+    ORD-GUARD-MASKED: { severity: info, meaning: "A hook on a guard event ends in || true or ; exit 0, so a failure cannot block. Observers do this on purpose, so it is info." }
+    ORD-GUARD-NO-TIMEOUT: { severity: info, meaning: A hook on a guard event has no timeout and gets the harness default, so it can hold up every matching call. }
+    ORD-EVENT-LOAD: { severity: info, meaning: One event starts more than 12 hooks at once for a single call. }
+    ORD-RUN-FAILING: { severity: warn, meaning: "A sequenced hook failed or timed out in more than a quarter of at least 8 recorded runs in the last 2 months." }
+    ORD-CONFIG-NOTE: { severity: "warn for a file that cannot be read or parsed, info otherwise", meaning: A note the inventory raised while reading a configuration file. }
+  scope_rule: The new checks live in untangle, so lint and watch keep their current output.
+  exit: 0 with no warn or error, 1 otherwise. A healed flaw no longer counts, because the exit comes from a re-scan after healing.
+  model_answer:
+    shape: "{summary: string, root_causes: [{title: string, finding_refs: [index], why: string, suggestion: string}]}"
+    rule: A root cause that names no valid finding index is dropped. The output labels this part as a model assessment.
+
+healing:
+  setting: "untangle.heal is off (default), plan, or auto."
+  kill_switch: ORDONNATEUR_HEAL_DISABLED=1 behaves as off.
+  modes:
+    off: Findings only, each marked with whether a healer exists. --heal and --apply are refused with the reason.
+    plan: --heal prints every available plan and writes nothing. --heal --apply applies them.
+    auto: A plain untangle applies the healers marked safe and prints plans for the rest. --heal --apply also applies the rest.
+  consent: Setting untangle.heal to auto is the user's standing yes for safe healers. An agent never changes this setting. A person may change it on the command line or in the web app, where auto needs the word auto typed.
+  trigger: Healing runs only when a person or agent runs untangle, or a person presses Run or Apply in the web app, never from watch, a session-start hook, or opening a web page.
+  healers:
+    - { id: sequence-escaped, finding: ORD-ESCAPED, safe: true, action: "Adds the escaped hook to the end of its event's sequence through Takeover." }
+    - { id: drop-ignored-matcher, finding: "ORD-MATCHER info on a no-matcher event", safe: true, action: Removes a matcher Claude Code ignores from the hook's group in the user or local settings file. }
+    - { id: drop-duplicate, finding: "ORD-DUP info where both copies sit in user and local settings", safe: true, action: Removes the local copy of an identical handler that Claude Code runs once. }
+    - { id: remove-dead, finding: ORD-DEAD, safe: false, action: Removes a handler whose program does not exist from the user or local settings file. }
+  never:
+    - A hook on a guard event, a hook with onFailure block, or a hook the policy port protects.
+    - Plugin, project, or managed hooks.
+    - Any Codex file, Hermes's allowlist, or a card digest.
+    - Anything a model chose. A model answer cannot add, select, or change a heal action.
+  write_path: Every heal is a plan with a diff, a policy judgment, a backup, and a compare-and-swap on the settings file. A warn or deny skips that heal and reports it.
+  verify_and_rollback: After applying, untangle re-runs the scan. If a failing finding appears that was not there before, it restores the previous text of what it wrote, with the same compare-and-swap, and reports the rollback. A failed restore is reported as an error with the backup path.
+  record: Each attempt appends to the heals state stream and emits ordonnateur.heal.applied, ordonnateur.heal.skipped, or ordonnateur.heal.rolled_back.
+
+plan:
+  command: "ordonnateur plan [--project DIR] [--answers FILE] [--questions] [--reinterview] [--no-interview] [--proposals FILE] [--apply IDS] [--scope user|local] [--allow-widening] [--no-model] [--json]"
+  interview:
+    shape: Four short questions at most, each with choices, and each can be skipped.
+    questions:
+      - { id: goal, text: "What do you most want from your agent setup?", choices: [speed, safety, fewer prompts, lower cost, reliability] }
+      - { id: harnesses, text: "Which harnesses do you use most?", choices: [claude-code, codex, hermes, antigravity] }
+      - { id: unattended, text: "Do agents run unattended here?", choices: [often, sometimes, never] }
+      - { id: constraint, text: "Anything that must not change?", choices: [] }
+    terminal: On a terminal, the questions are asked in place.
+    agents: "--questions prints them, the agent asks through its question tool, and --answers passes the replies as JSON."
+    no_terminal: With no terminal, no saved profile, and no --answers or --no-interview, it prints the questions with how to answer and exits 0 having changed nothing.
+    profile: Answers are saved in the plan-profile state stream and reused. --reinterview asks again.
+  scan:
+    reads: "Claude Code user, local, project, and managed settings, including permissions, env names, model settings, plugins, MCP servers, agents, and skills; Codex config.toml; Hermes config.yaml; Antigravity config and hooks; and the untangle findings."
+    writes: Nothing.
+  proposal:
+    shape: "{title: string, why: string, serves: string, harness: string, kind: apply|suggest, scope: user|local, ops: [{op: set|unset|add|remove, path: [string], value: any}], instructions: string}"
+    apply_kind: Claude Code only, through ops. The id is the first 12 hex of the sha256 of the canonical scope and ops.
+    suggest_kind: Exact words for the user, for other harnesses or anything apply refuses. ordonnateur writes nothing for these.
+    hook_order: A proposal about hook order is a suggest whose instructions give the ordonnateur order command, which has its own plan.
+    agent_authored: "--proposals FILE validates and stores proposals an agent wrote in --no-model mode, under the same rules."
+  allowed_paths:
+    - permissions.allow
+    - permissions.ask
+    - permissions.deny
+    - permissions.additionalDirectories
+    - env
+    - model
+    - effortLevel
+    - enabledPlugins
+    - cleanupPeriodDays
+  refused:
+    - Any other path, including hooks, disableAllHooks, statusLine, and any key ending in Helper.
+    - permissions.defaultMode, and any value that contains bypassPermissions.
+    - "A permissions.allow entry that is bare or a whole-tool wildcard, such as Bash, Bash(*), or *."
+    - An env name that reads as a credential, or PATH, LD_ names, DYLD_ names, RUBYOPT, RUBYLIB, NODE_OPTIONS, PYTHONPATH, or a name ending in _BASE_URL, _URL, or _HOST.
+    - Turning off a plugin that holds a guard-event hook or a hook the policy port protects.
+    - Project and managed settings, and any harness other than Claude Code.
+  widening: "An op widens when it adds to permissions.allow or additionalDirectories, removes from permissions.ask or deny, or turns on a plugin. A proposal with a widening op is labeled and also needs --allow-widening."
+  apply: "--apply takes stored ids and rebuilds each plan from the stored ops. It shows the diff, then applies with a policy judgment, a backup, and a compare-and-swap. A warn or deny refuses it. Applying a proposal rebuilds the other proposals of its run against the new settings text and updates their diffs, so they stay applicable. A change from outside ordonnateur still refuses them. Apply is never automatic and has no setting that makes it so."
+  record: Each apply appends to the plan-applied state stream and emits ordonnateur.plan.applied.
+  exit: 0 unless a command fails.
+
+persona:
+  id: regisseur
+  display_name: Régisseur
+  file: agents/regisseur.md
+  role: Runs untangle and plan for the user, works from their evidence, interviews briefly, and applies only what the user approved.

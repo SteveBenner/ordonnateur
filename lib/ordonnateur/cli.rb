@@ -34,6 +34,8 @@ module Ordonnateur
       "timings" => "ordonnateur timings [--event E] [--months N] [--json]",
       "fire" => "ordonnateur fire (<hook>|--event <Event>) [--scope user|local] [--payload FILE] [--set key=json]... [--cwd DIR] [--run] [--json] [--project DIR]",
       "watch" => "ordonnateur watch [--quiet] [--json] [--project DIR]",
+      "untangle" => "ordonnateur untangle [--harness H] [--project DIR] [--heal] [--apply] [--no-model] [--json]",
+      "plan" => "ordonnateur plan [--project DIR] [--answers FILE] [--questions] [--reinterview] [--no-interview] [--proposals FILE] [--apply IDS] [--scope user|local] [--allow-widening] [--no-model] [--json]",
       "run" => "ordonnateur run claude-code <Event> --card <path>",
       "record" => "ordonnateur record",
       "web" => "ordonnateur web [--bind ADDR] [--port N] [--public-origin URL] [--expose] [--open] [--read-only] [--json]\n    ordonnateur web url [--json]",
@@ -268,6 +270,41 @@ module Ordonnateur
         parser.on("--project DIR") { |v| opts[:project] = v }
       end
       Watch.new(ports: ports, settings: settings).call(options, out)
+    end
+
+    def cmd_untangle(argv, out, _err)
+      options = parse(argv, USAGE["untangle"]) do |parser, opts|
+        parser.on("--harness H") { |v| opts[:harness] = v }
+        parser.on("--project DIR") { |v| opts[:project] = v }
+        parser.on("--heal") { opts[:heal] = true }
+        parser.on("--apply") { opts[:apply] = true }
+        parser.on("--no-model") { opts[:no_model] = true }
+        parser.on("--json") { opts[:json] = true }
+      end
+      raise Usage, "usage: #{USAGE['untangle']}" unless argv.empty?
+
+      require_relative "untangle"
+      Untangle.new(ports: ports, settings: settings).call(options, out)
+    end
+
+    def cmd_plan(argv, out, _err)
+      options = parse(argv, USAGE["plan"]) do |parser, opts|
+        parser.on("--project DIR") { |v| opts[:project] = v }
+        parser.on("--answers FILE") { |v| opts[:answers] = v }
+        parser.on("--questions") { opts[:questions] = true }
+        parser.on("--reinterview") { opts[:reinterview] = true }
+        parser.on("--no-interview") { opts[:no_interview] = true }
+        parser.on("--proposals FILE") { |v| opts[:proposals] = v }
+        parser.on("--apply IDS") { |v| opts[:apply] = v }
+        parser.on("--scope S") { |v| opts[:scope] = v }
+        parser.on("--allow-widening") { opts[:allow_widening] = true }
+        parser.on("--no-model") { opts[:no_model] = true }
+        parser.on("--json") { opts[:json] = true }
+      end
+      raise Usage, "usage: #{USAGE['plan']}" unless argv.empty?
+
+      require_relative "setup_plan"
+      SetupPlan.new(ports: ports, settings: settings).call(options, out, input: $stdin)
     end
 
     def cmd_fire(argv, out, _err)

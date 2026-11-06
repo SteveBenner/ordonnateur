@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-06
+
+### Changed
+
+- **`ordonnateur optimize` is now `ordonnateur plan`.** Options are unchanged. The old name is gone. State moves with
+  it to `plan-profile`, `plan-proposals`, and `plan-applied`, the event is `ordonnateur.plan.applied`, and the contract
+  is `specs/untangle-plan.yml`. Answers and proposals saved under the old name are not carried over, so `plan` asks
+  again.
+
+### Added
+
+- **`ordonnateur web` now has Health, Plan, and Settings beside Hooks.** Press 1 to 4 to switch, or open a section
+  with `?section=`.
+  - **Health** shows the eight dimensions, which filter the findings table, and the model's assessment, labeled as
+    judged. You can preview each heal's diff and apply it yourself. Opening the page never heals, even under `auto`,
+    and Run says Run and heal when it will.
+  - **Plan** takes your goals, which are all optional, and runs with a model or facts only. Each proposal shows its
+    diff or instructions and has its own Apply. One that widens access is marked and needs its id typed. Facts only
+    gives you the prompt to copy for an agent, and a field to paste what it writes.
+  - **Settings** changes `untangle.heal` and the `advisor.*` settings, shows where each value comes from, and resets
+    them. Turning on `auto` needs the word typed, and a kill switch locks its row and says which switch.
+  - Model runs happen in the background, so the page stays usable and finds its run again after a reload.
+
+### Fixed
+
+- **Applying one proposal no longer blocks the rest of that run.** The others were refused as changed, even though
+  ordonnateur itself had made the change, so you had to run the model again. They now update against the new settings
+  and show the new diff. A change from outside ordonnateur still refuses them.
+- `advisor.model` is checked before any model call, so a value can never be read as a command-line flag.
+
+## [0.3.0] - 2026-11-06
+
+### Added
+
+- **`ordonnateur untangle` checks the health of your hook setup.** It reports every harness's hooks in eight
+  dimensions (liveness, correctness, duplication, ordering, latency, safety, integrity, and freshness) and adds checks
+  that `lint` leaves out, such as a hook program someone else can write to, or a guard-event hook that can't block. A
+  model then explains the likely root causes, printed apart from the measured facts. `lint` and `watch` output is
+  unchanged.
+- **`untangle` can heal a fixed set of flaws.** The new `untangle.heal` setting is `off` by default. `plan` shows heal
+  plans and applies them with `--heal --apply`. `auto` also applies the built-in safe healers on each `untangle` run,
+  which changes the earlier rule that nothing is written without `--apply`, and only because you opted in. A model
+  never chooses a heal. Each heal has a diff, a policy judgment, and a backup, and it's rolled back if a re-scan finds
+  a new failing finding. Guard-event, plugin, project, and managed hooks are never healed, and neither are Codex files
+  or Hermes's allowlist.
+- **`ordonnateur optimize` tunes your agent setup to your goals.** It asks up to four short questions, reads your
+  settings across harnesses, and offers changes that serve your answers. Allowlisted Claude Code settings can be
+  applied with `--apply` and a diff, a policy judgment, and a backup. A change that widens access also needs
+  `--allow-widening`, and it never turns off a plugin that holds a guard. Other harnesses get exact instructions.
+- **The model is configurable.** By default both verbs run a harness CLI (`claude` or `codex`) with no tools and none of
+  your hooks. `advisor.backend: extension` uses the new `author` port, which is rLLM on rStack hosts. `--no-model` lets
+  the agent running the command act as the model. Secrets are redacted before any model sees your setup. If the model
+  is off or fails, you still get every measured finding.
+- **The Régisseur agent** runs these two verbs for you, working from evidence and applying only what you approve.
+
 ## [0.2.18] - 2026-11-05
 
 ### Fixed

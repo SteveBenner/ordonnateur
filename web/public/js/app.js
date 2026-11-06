@@ -8,6 +8,9 @@ import { app } from "./core/store.js";
 import { bootSession, watchLinks } from "./core/session.js";
 import * as keys from "./core/keys.js";
 import * as layoutView from "./views/layout.js";
+import * as healthView from "./views/health.js";
+import * as setupPlanView from "./views/setup-plan.js";
+import * as settingsView from "./views/settings.js";
 
 const GATE_STATES = ["exchanging", "link_used_or_expired", "no_session", "session_ended", "server_unreachable"];
 
@@ -18,6 +21,7 @@ function openShell() {
   if (shell) return;
   shell = document.createElement("od-app-shell");
   shell.registerView(layoutView);
+  shell.registerSections({ health: healthView, plan: setupPlanView, settings: settingsView });
   document.body.insertBefore(shell, document.getElementById("live-polite"));
 }
 

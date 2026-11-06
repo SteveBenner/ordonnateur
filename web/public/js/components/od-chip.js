@@ -102,7 +102,7 @@ class OdChip extends HTMLElement {
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "od-native od-remove";
-      remove.setAttribute("aria-label", `Remove filter ${text}`);
+      remove.setAttribute("aria-label", `Remove ${text}`);
       remove.append(icon("close"));
       remove.addEventListener("click", () => {
         this.dispatchEvent(new CustomEvent("od-remove", { bubbles: true, detail: { label: text } }));

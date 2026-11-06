@@ -1,14 +1,17 @@
 schema: rplugin/v1
 id: ordonnateur
 name: ordonnateur
-version: 0.2.18
+version: 0.4.0
 rplugin: ">= 1.19.0"
 native: true
-description: Puts each harness event's hooks in the order you choose, and lists, lints, times and test-fires every hook.
+description: Puts each harness event's hooks in the order you choose, lists, lints, times and test-fires every hook, and checks, heals and tunes an agent setup.
 ports:
   required: [state, policy]
-  optional: [events, notify, folder_picker]
+  optional: [events, notify, folder_picker, author]
   declared:
+    - name: author
+      summary: Gives untangle and plan a model, through a harness CLI with no tools by default, or a fleet extension's adapter when advisor.backend is extension.
+      standalone: { file: lib/ordonnateur/author/standalone.rb, class: Ordonnateur::Author::Standalone }
     - name: policy
       summary: Judges ordonnateur's own writes and test-fires against the host's policy engine and names the hooks it must never absorb.
       standalone: { file: lib/ordonnateur/policy/standalone.rb, class: Ordonnateur::Policy::Standalone }
@@ -35,14 +38,20 @@ settings:
   - { key: web.theme, type: enum, options: [system, apple-noir, apple-austere, tronwave, minimal-dark, minimal-light], default: system, scopes: [machine], description: "Theme ordonnateur web shows on a first visit; the viewer's own choice in the browser wins." }
   - { key: web.projects, type: string, default: "", scopes: [machine], description: "Colon-separated absolute project roots whose local scope ordonnateur web always lists." }
   - { key: web.discover, type: bool, default: true, scopes: [machine], description: "Lists the projects Claude Code knows by reading only the keys of the projects object in its state file." }
+  - { key: untangle.heal, type: enum, options: ["off", plan, auto], default: "off", scopes: [machine], description: "What untangle may heal: off reports only, plan prints heal plans and applies them with --heal --apply, and auto also applies the built-in safe healers on every untangle run. ORDONNATEUR_HEAL_DISABLED=1 behaves as off." }
+  - { key: advisor.backend, type: enum, options: [harness, extension], default: harness, scopes: [machine], description: "Where untangle and plan get a model: harness runs a harness CLI with no tools, and extension uses the author port's extension adapter (rLLM on rStack hosts). ORDONNATEUR_ADVISOR_DISABLED=1 turns the model off." }
+  - { key: advisor.harness, type: enum, options: [claude, codex], default: claude, scopes: [machine], description: "The harness CLI the harness backend runs." }
+  - { key: advisor.model, type: string, default: sonnet, scopes: [machine], description: "The model name the harness backend passes to its CLI." }
 contents:
   skills:
     - { id: ordonnateur, path: skills/ordonnateur/SKILL.md }
-  agents: []
+  agents:
+    - { id: regisseur, path: agents/regisseur.md }
   specs:
     - { path: specs/app.yml }
     - { path: specs/card.yml }
     - { path: specs/web.yml }
+    - { path: specs/untangle-plan.yml }
   scripts: []
   hooks: hooks/hooks.yml
   docs: []

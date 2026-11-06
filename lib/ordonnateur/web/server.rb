@@ -10,6 +10,8 @@ require_relative "limiter"
 require_relative "layout"
 require_relative "projects"
 require_relative "plans"
+require_relative "runs"
+require_relative "verbs"
 require_relative "app"
 
 module Ordonnateur
@@ -134,10 +136,14 @@ module Ordonnateur
 
       def build_context(auth, logger)
         layout = Layout.new(ports: @ports, settings: @settings)
+        apply_lock = Mutex.new
+        runs = Runs.new(logger: logger)
         Context.new(
           bind: @bind, port: @port, read_only: @read_only, exposed: @exposed, auth: auth, logger: logger,
           public_origin: @public_origin, ports: @ports, settings: @settings, limiter: Limiter.new, layout: layout,
-          projects: Projects.new(settings: @settings), plans: Plans.new(ports: @ports, settings: @settings, layout: layout)
+          projects: Projects.new(settings: @settings), plans: Plans.new(ports: @ports, settings: @settings, layout: layout),
+          runs: runs, apply_lock: apply_lock,
+          verbs: Verbs.new(ports: @ports, settings: @settings, runs: runs, apply_lock: apply_lock)
         )
       end
 

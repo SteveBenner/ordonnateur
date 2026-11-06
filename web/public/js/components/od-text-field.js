@@ -30,8 +30,10 @@ class OdTextField extends HTMLElement {
     this.labelEl.htmlFor = this.fieldId;
     this.box = document.createElement("div");
     this.box.className = "od-box";
-    this.input = document.createElement("input");
-    this.input.type = "text";
+    const multiline = this.hasAttribute("multiline");
+    this.input = document.createElement(multiline ? "textarea" : "input");
+    if (multiline) this.input.rows = Number(this.getAttribute("rows")) || 4;
+    else this.input.type = "text";
     this.input.className = "od-native";
     this.input.id = this.fieldId;
     this.input.value = this.getAttribute("value") || "";

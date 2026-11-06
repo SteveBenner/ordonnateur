@@ -62,7 +62,7 @@ function touchedEvents(plan, order) {
   return names.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
 }
 
-function diffRows(text) {
+export function diffRows(text) {
   const lines = String(text || "").split("\n");
   if (lines.length && lines[lines.length - 1] === "") lines.pop();
   return lines.map((line, index) => {

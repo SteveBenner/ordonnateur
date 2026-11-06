@@ -63,7 +63,7 @@ module Ordonnateur
 
     Context = Struct.new(
       :bind, :port, :read_only, :exposed, :auth, :logger, :public_origin, :ports, :settings, :limiter, :layout,
-      :projects, :plans, keyword_init: true
+      :projects, :plans, :runs, :verbs, :apply_lock, keyword_init: true
     )
 
     module_function

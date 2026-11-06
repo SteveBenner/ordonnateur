@@ -17,6 +17,7 @@ module Ordonnateur
       SAFE = %w[GET HEAD].freeze
       MAX_BODY = 1024 * 1024
       PLAN_ID = /\Apl_[0-9a-f]{16}\z/.freeze
+      RUN_ID = /\A[0-9a-f]{16}\z/.freeze
       HOST_FORMAT = /\A(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(?::(\d+))?\z/.freeze
       MIME = {
         ".html" => "text/html; charset=utf-8",
@@ -268,6 +269,10 @@ module Ordonnateur
         when "fingerprint" then route_fingerprint(exchange, rest)
         when "layout" then route_layout(exchange, rest)
         when "plans" then route_plans(exchange, rest)
+        when "health" then route_health(exchange, rest)
+        when "runs" then route_runs(exchange, rest)
+        when "proposals" then route_proposals(exchange, rest)
+        when "settings" then route_settings(exchange, rest)
         else fail!(404, "not_found", "no such route")
         end
       end
@@ -397,7 +402,55 @@ module Ordonnateur
         fail!(404, "not_found", "no such route") unless rest.length == 3 && rest[2] == "apply"
         fail!(405, "method_not_allowed", "unsupported method") unless method == "POST"
         confirm = body_object(exchange)["confirm"]
-        json(exchange, 200, @ctx.plans.apply(rest[1], confirm))
+        json(exchange, 200, @ctx.apply_lock.synchronize { @ctx.plans.apply(rest[1], confirm) })
+      end
+
+      def query_pairs(exchange)
+        URI.decode_www_form(exchange.req.query_string.to_s).to_h
+      rescue ArgumentError
+        fail!(400, "bad_request", "the query string is not valid")
+      end
+
+      def route_health(exchange, rest)
+        fail!(404, "not_found", "no such route") unless rest.length == 1
+        only(exchange, "GET")
+        json(exchange, 200, @ctx.verbs.health(query_pairs(exchange)))
+      end
+
+      def route_runs(exchange, rest)
+        if rest.length == 1
+          only(exchange, "GET", "POST")
+          return json(exchange, 200, @ctx.verbs.runs_overview) unless exchange.req.request_method == "POST"
+
+          return json(exchange, 202, @ctx.verbs.start_run(body_object(exchange)))
+        end
+        fail!(404, "not_found", "no such route") unless rest.length == 2 && RUN_ID.match?(rest[1].to_s)
+        only(exchange, "GET")
+        json(exchange, 200, @ctx.verbs.run(rest[1]))
+      end
+
+      def route_proposals(exchange, rest)
+        if rest.length == 1
+          only(exchange, "GET", "POST")
+          return json(exchange, 200, @ctx.verbs.proposals(query_pairs(exchange))) unless exchange.req.request_method == "POST"
+
+          return json(exchange, 201, @ctx.verbs.store_proposals(body_object(exchange)))
+        end
+        fail!(404, "not_found", "no such route") unless rest == %w[proposals apply]
+        only(exchange, "POST")
+        json(exchange, 200, @ctx.verbs.apply_proposals(body_object(exchange)))
+      end
+
+      def route_settings(exchange, rest)
+        if rest.length == 1
+          only(exchange, "GET")
+          return json(exchange, 200, @ctx.verbs.settings)
+        end
+        fail!(404, "not_found", "no such route") unless rest.length == 2
+        only(exchange, "PUT", "DELETE")
+        return json(exchange, 200, @ctx.verbs.delete_setting(rest[1])) if exchange.req.request_method == "DELETE"
+
+        json(exchange, 200, @ctx.verbs.put_setting(rest[1], body_object(exchange)))
       end
     end
   end

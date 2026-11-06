@@ -48,10 +48,21 @@ od-segmented .od-native:focus-visible {
   outline-offset: calc(var(--focus-w) * -1);
 }
 
-od-segmented[aria-disabled="true"] {
-  opacity: 0.5;
+od-segmented .od-native[aria-disabled="true"] {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+od-segmented .od-native[aria-disabled="true"]:hover {
+  background: transparent;
 }
 
 od-segmented[aria-disabled="true"] .od-native {
+  color: var(--text-faint);
   cursor: not-allowed;
+}
+
+od-segmented[aria-disabled="true"] .od-native[aria-checked="true"] {
+  color: var(--text-dim);
+  box-shadow: inset 0 calc(-1 * var(--indicator-w)) 0 var(--border-strong);
 }
