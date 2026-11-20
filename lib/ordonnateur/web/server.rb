@@ -10,6 +10,8 @@ require_relative "limiter"
 require_relative "layout"
 require_relative "projects"
 require_relative "plans"
+require_relative "hold"
+require_relative "hooks"
 require_relative "runs"
 require_relative "verbs"
 require_relative "app"
@@ -18,6 +20,7 @@ module Ordonnateur
   module Web
     class Server
       LOG_LIMIT = 4 * 1024 * 1024
+      TICK_SECONDS = 60
       ACCESS_FORMAT = "%t %m %U %s %{X-Request-Id}o".freeze
 
       class LogFile
@@ -141,7 +144,7 @@ module Ordonnateur
         Context.new(
           bind: @bind, port: @port, read_only: @read_only, exposed: @exposed, auth: auth, logger: logger,
           public_origin: @public_origin, ports: @ports, settings: @settings, limiter: Limiter.new, layout: layout,
-          projects: Projects.new(settings: @settings), plans: Plans.new(ports: @ports, settings: @settings, layout: layout),
+          projects: Projects.new(settings: @settings), plans: Plans.new(ports: @ports, settings: @settings, layout: layout, logger: logger),
           runs: runs, apply_lock: apply_lock,
           verbs: Verbs.new(ports: @ports, settings: @settings, runs: runs, apply_lock: apply_lock)
         )
@@ -155,15 +158,41 @@ module Ordonnateur
         @server = server
         port = server.listeners.first.addr[1]
         context.port = port
-        server.mount("/", Servlet, App.new(context))
+        hooks = Hooks.new(ports: @ports, settings: @settings, layout: context.layout, plans: context.plans, logger: logger)
+        context.layout.observer = hooks
+        server.mount("/", Servlet, App.new(context, hooks: hooks))
         write_info(port)
         install_traps
         emit("start", port)
+        ticker = start_tick(hooks, context)
         on_ready&.call(Info.new(@bind, port, Process.pid, auth, @public_origin))
         server.start
         emit("stop", port)
       ensure
+        stop_tick(ticker)
         server&.shutdown
+      end
+
+      def start_tick(hooks, context)
+        wake = Queue.new
+        thread = Thread.new do
+          until @stopping
+            wake.pop(timeout: TICK_SECONDS)
+            break if @stopping
+
+            hooks.tick(context.projects.pinned)
+          end
+        end
+        thread.report_on_exception = false
+        { thread: thread, wake: wake }
+      end
+
+      def stop_tick(ticker)
+        return unless ticker
+
+        @stopping = true
+        ticker[:wake] << :stop
+        ticker[:thread].join(5)
       end
 
       def emit(kind, port)

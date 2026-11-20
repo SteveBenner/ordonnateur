@@ -1,6 +1,6 @@
 {
   "name": "ordonnateur",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Puts each harness event's hooks in the order you choose, lists, lints, times and test-fires every hook, and checks, heals and tunes an agent setup.",
   "repository": "https://github.com/SteveBenner/ordonnateur",
   "license": "MIT",

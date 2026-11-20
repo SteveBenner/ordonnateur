@@ -27,6 +27,26 @@ const KINDS = {
   plan: {
     reorder: { label: "Reorder", icon: null, tone: "neutral" },
     change: { label: "Change", icon: null, tone: "warn" },
+    script_edit: { label: "Script edit", icon: null, tone: "accent" },
+    delete: { label: "Delete", icon: null, tone: "danger" },
+  },
+  provenance: {
+    first_seen: { label: "First seen", icon: "info", tone: "neutral" },
+    changed: { label: "Changed", icon: "reset", tone: "accent" },
+    disappeared: { label: "Disappeared", icon: "eye-off", tone: "dim" },
+    reappeared: { label: "Reappeared", icon: "check", tone: "neutral" },
+    enabled: { label: "Enabled", icon: "check", tone: "ok" },
+    disabled: { label: "Disabled", icon: "slash-circle", tone: "dim" },
+    edited: { label: "Edited", icon: null, tone: "accent" },
+    deleted: { label: "Deleted", icon: "deny", tone: "danger" },
+  },
+  script: {
+    text: { label: "Text", icon: null, tone: "neutral" },
+    binary: { label: "Binary", icon: "warn", tone: "warn" },
+    missing: { label: "Missing", icon: "deny", tone: "danger" },
+    too_large: { label: "Too large", icon: "warn", tone: "warn" },
+    unreadable: { label: "Unreadable", icon: "deny", tone: "danger" },
+    refused: { label: "Refused", icon: "lock", tone: "danger" },
   },
   severity: {
     error: { label: "Error", icon: "error", tone: "danger" },

@@ -1,0 +1,309 @@
+od-hook-detail {
+  display: contents;
+}
+
+@media (min-width: 768px) {
+  od-hook-detail od-dialog[size="lg"] > .od-native {
+    block-size: calc(100dvh - 2 * var(--space-6));
+    margin-block: var(--space-6);
+  }
+}
+
+od-hook-detail od-tabs .od-tablist {
+  block-size: calc(var(--control-sm) + var(--border-w));
+}
+
+od-hook-detail od-dialog > .od-native > .od-panel {
+  block-size: 100%;
+  max-block-size: none;
+}
+
+od-hook-detail od-dialog .od-panel > .od-header {
+  flex: none;
+}
+
+od-hook-detail od-dialog .od-panel > .od-footer {
+  display: none;
+}
+
+od-hook-detail od-dialog .od-panel > .od-body {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+od-hook-detail .hd-notices {
+  flex: none;
+  display: grid;
+}
+
+od-hook-detail .hd-notices:empty {
+  display: none;
+}
+
+od-hook-detail .hd-notices > od-banner {
+  border-bottom: var(--border-w) solid var(--border);
+}
+
+od-hook-detail .hd-stage {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+od-hook-detail .hd-stage > od-tabs {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+od-hook-detail .hd-stage > od-tabs[hidden] {
+  display: none;
+}
+
+od-hook-detail od-tabs .od-tablist {
+  flex: none;
+  padding-inline: var(--space-3);
+}
+
+od-hook-detail od-tabs > [role="tabpanel"] {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-3);
+  overflow: auto;
+}
+
+od-hook-detail od-tabs > [role="tabpanel"][hidden] {
+  display: none;
+}
+
+od-hook-detail od-tabs > .hd-script {
+  overflow: hidden;
+}
+
+od-hook-detail .hd-overlay {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-3);
+  overflow: auto;
+}
+
+od-hook-detail .hd-overlay[hidden] {
+  display: none;
+}
+
+od-hook-detail .hd-loading {
+  display: grid;
+  gap: var(--space-2);
+}
+
+od-hook-detail .hd-overview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: var(--space-3);
+}
+
+od-hook-detail .hd-cell {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+od-hook-detail .hd-overview > .hd-span {
+  grid-column: 1 / -1;
+}
+
+od-hook-detail .hd-command-wrap {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--control-bg);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+od-hook-detail .hd-command {
+  margin: 0;
+  max-block-size: calc(6 * var(--lh-xs));
+  overflow: auto;
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+od-hook-detail .hd-words {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
+
+od-hook-detail .hd-words-label {
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+od-hook-detail .hd-word {
+  padding-inline: var(--space-1);
+  background: var(--surface-2);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  overflow-wrap: anywhere;
+}
+
+od-hook-detail .hd-path-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+od-hook-detail .hd-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+od-hook-detail .hd-can-val {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+od-hook-detail .hd-can-val .od-icon {
+  align-self: center;
+}
+
+od-hook-detail .hd-history {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+
+od-hook-detail .hd-history > od-banner {
+  border: var(--border-w) solid var(--border);
+}
+
+od-hook-detail .hd-history-text {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+od-hook-detail .hd-script {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+od-hook-detail .hd-script-path {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--control-sm);
+  min-width: 0;
+}
+
+od-hook-detail .hd-script-tools {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+od-hook-detail .hd-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+od-hook-detail .hd-fact {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+od-hook-detail .hd-actions-wrap {
+  display: grid;
+  gap: var(--space-1);
+}
+
+od-hook-detail .hd-actions {
+  display: grid;
+  grid-template-columns: repeat(var(--hd-actions, 1), minmax(0, 1fr));
+  align-items: center;
+  gap: var(--space-2);
+}
+
+od-hook-detail .hd-actions[hidden] {
+  display: none;
+}
+
+od-hook-detail .hd-note {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+od-hook-detail .hd-code-slot {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  min-height: 0;
+}
+
+od-hook-detail .hd-script-banners {
+  display: grid;
+  gap: var(--space-1);
+}
+
+od-hook-detail .hd-script-banners > od-banner {
+  border: var(--border-w) solid var(--border);
+}
+
+od-hook-detail .hd-code-state {
+  min-height: 0;
+  overflow: auto;
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--control-bg);
+}
+
+od-hook-detail .hd-provenance {
+  display: block;
+}
+
+od-hook-detail .hd-edit {
+  display: block;
+  scroll-padding-block-end: calc(var(--control-md) + var(--lh-xs) + 2 * var(--space-2) + var(--space-3));
+}
+
+@media (max-width: 767px) {
+  od-hook-detail .hd-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 599px) {
+  od-hook-detail .hd-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

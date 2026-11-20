@@ -32,6 +32,14 @@ export function applyPlan(id, confirm, options) {
   return post(endpoints.apply(id), confirm ? { confirm } : {}, options);
 }
 
+export function startHold(id, options) {
+  return post(endpoints.hold(id), {}, { timeout: 5000, ...options });
+}
+
+export function applyHeld(id, holdId, options) {
+  return post(endpoints.apply(id), { hold_id: holdId }, options);
+}
+
 export function shell() {
   return document.querySelector("od-app-shell");
 }

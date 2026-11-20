@@ -1,0 +1,55 @@
+od-diff-view {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+od-diff-view .od-diff-path {
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  overflow-wrap: anywhere;
+}
+
+od-diff-view .od-diff {
+  display: block;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--control-bg);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  white-space: pre;
+}
+
+od-diff-view .od-diff:focus-visible {
+  outline-offset: calc(-1 * var(--focus-w));
+}
+
+od-diff-view .od-diff-line {
+  display: grid;
+  grid-template-columns: var(--space-4) max-content;
+  min-width: 100%;
+  padding-inline: var(--space-2);
+  line-height: var(--lh-xs);
+}
+
+od-diff-view .od-diff-line[data-kind="add"] {
+  background: var(--diff-add-bg);
+}
+
+od-diff-view .od-diff-line[data-kind="del"] {
+  background: var(--diff-del-bg);
+}
+
+od-diff-view .od-diff-line[data-kind="hunk"] {
+  color: var(--text-dim);
+}
+
+od-diff-view .od-diff-sign {
+  color: var(--text-dim);
+  user-select: none;
+}

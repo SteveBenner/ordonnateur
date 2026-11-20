@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-19
+
+### Added
+
+- **A hook's script opens in a modal.** Click a hook's command, its Details button, a list row's command, or Details in
+  its menu (or press `d` on a hook) to see the script it runs, its path, size, and checksum, and where the hook came
+  from. Download saves the exact file, and Open in desktop hands it to the computer that runs the server. A script that
+  is missing, binary, too large, or kept in a credentials folder says so instead of showing anything. A second tab
+  lists the hook's history, and `?hook=<id>&tab=` opens a hook directly.
+- **Provenance: when each hook appeared, changed, was enabled or disabled, and went away.** ordonnateur records what it
+  sees at each session start, each time the web app loads a layout, and every minute while the web app runs, plus
+  every edit or delete it makes itself. A first sighting says first seen, never installed, because hook files carry no
+  install time; a plugin's install record and the file's modified time appear as labeled hints. `ordonnateur
+  provenance [<hook id>]` prints it. It is kept in a local file by default. A new `provenance` port lets an extension
+  keep it elsewhere, and `extensions/rdb` keeps it in rdb. If that store stops answering, events are held in the local
+  file and replayed when it returns, and the modal says the store is degraded.
+- **Edit a hook's script, or delete a hook, from the web app, behind several locks.** Both are off until you run
+  `rplugin settings set ordonnateur web.hook_edit true` in a terminal; the browser can never turn them on. The Edit tab
+  opens with the command and a prompt for an AI model, which is the better editor, and only then offers a hand edit.
+  Every change is a plan with its diff and policy verdict, and saving or deleting needs a three-second press-and-hold
+  that the server times itself. Delete works on Claude Code, Hermes, and Antigravity hooks you own; Codex hooks, plugin
+  hooks, hooks your policy engine pins, and a script a pinned hook runs are never changed.
+- **`ordonnateur hook show|edit|delete`** does the same from the command line, for you or for an agent: it prints the
+  plan and writes only with `--apply --confirm <plan id>`. The skill tells agents to use these and never the web API.
+- **Settings:** `web.hook_edit` (off), `provenance.enabled` (on), and `provenance.backend` (`local` or `extension`,
+  overridden by `ORDONNATEUR_PROVENANCE_BACKEND`).
+
 ## [0.4.0] - 2026-11-06
 
 ### Changed

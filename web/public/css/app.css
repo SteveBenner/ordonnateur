@@ -27,6 +27,16 @@
 @import url("components/od-theme-switcher.css") layer(components);
 @import url("components/od-source-bar.css") layer(components);
 @import url("components/od-folder-picker.css") layer(components);
+@import url("components/od-copy-block.css") layer(components);
+@import url("components/od-code-view.css") layer(components);
+@import url("components/od-code-editor.css") layer(components);
+@import url("components/od-diff-view.css") layer(components);
+@import url("components/od-hold-button.css") layer(components);
+@import url("components/od-provenance-timeline.css") layer(components);
+@import url("components/od-ai-handoff.css") layer(components);
+@import url("components/od-plan-summary.css") layer(components);
+@import url("components/od-hook-edit.css") layer(components);
+@import url("components/od-hook-detail.css") layer(components);
 
 @import url("shell.css") layer(shell);
 @import url("list.css") layer(list);

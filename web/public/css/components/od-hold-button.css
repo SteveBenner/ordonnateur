@@ -1,0 +1,81 @@
+od-hold-button {
+  display: grid;
+  justify-items: end;
+  gap: var(--space-1);
+  min-width: 0;
+  --btn-fill: var(--accent);
+  --btn-ink: var(--accent-contrast);
+  --btn-ink-disabled: var(--text);
+}
+
+od-hold-button[variant="danger"] {
+  --btn-fill: var(--danger);
+  --btn-ink: var(--danger-contrast);
+}
+
+od-hold-button .od-native {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: var(--control-md);
+  min-width: var(--control-md);
+  padding-inline: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--btn-fill);
+  color: var(--btn-ink);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--weight-strong);
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+od-hold-button .od-native[aria-disabled="true"] {
+  cursor: not-allowed;
+  background: color-mix(in srgb, var(--btn-fill) 50%, transparent);
+  color: var(--btn-ink-disabled);
+}
+
+od-hold-button .od-native[aria-busy="true"] {
+  cursor: progress;
+}
+
+od-hold-button .od-hb-ring {
+  flex: none;
+  width: var(--badge);
+  height: var(--badge);
+}
+
+od-hold-button .od-hb-track {
+  stroke: color-mix(in srgb, var(--btn-ink) 35%, transparent);
+  stroke-width: 2;
+}
+
+od-hold-button .od-hb-arc {
+  stroke: var(--btn-ink);
+  stroke-width: 2;
+  stroke-linecap: butt;
+}
+
+od-hold-button .od-count {
+  display: inline-block;
+  min-width: 4ch;
+  font-variant-numeric: tabular-nums;
+  text-align: start;
+}
+
+od-hold-button .od-hb-hint {
+  min-height: var(--lh-xs);
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  text-align: end;
+  overflow-wrap: anywhere;
+}

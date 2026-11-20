@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 # SPDX-License-Identifier: MIT
 
+require "digest"
 require "json"
 require "optparse"
 
@@ -17,6 +18,11 @@ require_relative "timings"
 require_relative "fire"
 require_relative "watch"
 require_relative "safe_output"
+require_relative "canonical"
+require_relative "hook_script"
+require_relative "script_edit"
+require_relative "provenance/facade"
+require_relative "hook_cli"
 
 module Ordonnateur
   module Cli
@@ -39,8 +45,12 @@ module Ordonnateur
       "run" => "ordonnateur run claude-code <Event> --card <path>",
       "record" => "ordonnateur record",
       "web" => "ordonnateur web [--bind ADDR] [--port N] [--public-origin URL] [--expose] [--open] [--read-only] [--json]\n    ordonnateur web url [--json]",
+      "hook" => "ordonnateur hook show <id> [--content] [--project DIR] [--json]\n    ordonnateur hook edit <id> (--from-file PATH | --stdin) [--project DIR] [--apply --confirm PLAN_ID] [--json]\n    ordonnateur hook delete <id> [--project DIR] [--apply --confirm PLAN_ID] [--json]",
+      "provenance" => "ordonnateur provenance [<id>] [--limit N] [--json]",
       "version" => "ordonnateur version"
     }.freeze
+
+    extend HookCli
 
     module_function
 

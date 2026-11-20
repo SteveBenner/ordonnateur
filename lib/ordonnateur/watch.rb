@@ -10,6 +10,7 @@ require_relative "safe_output"
 require_relative "inventory"
 require_relative "lint"
 require_relative "timings"
+require_relative "provenance/observer"
 require_relative "harnesses/claude_code"
 require_relative "harnesses/codex"
 require_relative "harnesses/hermes"
@@ -56,6 +57,7 @@ module Ordonnateur
       return 0 unless @settings.on?("watch.enabled")
 
       inventory = Inventory.load_full(harness: "all", project: options[:project], policy: @ports.policy)
+      observe(inventory)
       print = fingerprint(inventory)
       previous = @ports.state.read("watch").last
       return 0 if previous && previous["fingerprint"] == print
@@ -77,6 +79,14 @@ module Ordonnateur
       @ports.events.emit("ordonnateur.watch.changed", { "new" => added, "resolved" => resolved })
       report(added.map { |key| by_key[key] }, resolved, out, options)
       0
+    end
+
+    def observe(inventory)
+      Provenance::Observer.each_scope(inventory.hooks, project: inventory.root) do |_scope, key, hooks|
+        Provenance::Observer.call(ports: @ports, settings: @settings, hooks: hooks, scope_key: key, via: "watch")
+      end
+    rescue StandardError => e
+      warn("ordonnateur: provenance observation failed (#{e.class.name}: #{e.message.to_s[0, 160]})")
     end
 
     def notify(new_findings)

@@ -10,6 +10,7 @@ require "tmpdir"
 require_relative "model"
 require_relative "card"
 require_relative "inventory"
+require_relative "hook_script"
 require_relative "harnesses/claude_code"
 
 module Ordonnateur
@@ -17,7 +18,7 @@ module Ordonnateur
     Plan = Struct.new(
       :scope, :settings_path, :card_path, :settings_text_before, :settings_text_after, :card_text_before,
       :card_text_after, :settings_sha, :settings_mode, :card_before, :card_after, :verdicts, :refusals,
-      :notes, keyword_init: true
+      :notes, :classification, :needs_confirm, :hold_required, :deleted, keyword_init: true
     )
 
     attr_reader :scope, :root, :settings_path, :card_path
@@ -287,6 +288,50 @@ module Ordonnateur
       index ? list[index] = group : list << group
     end
 
+    def delete_refusal(hook)
+      reason = HookScript.hook_refusal(hook)
+      return reason if reason
+      return "is a member of the #{hook.scope} card, not the #{@scope} card of this change" if hook.scope != @scope && hook.status.to_s.start_with?("member#")
+      return "is in the #{hook.scope} settings, not the #{@scope} settings of this change" if hook.scope != @scope
+
+      nil
+    end
+
+    def delete_target(ref)
+      raise Refused, "refused:\n  #{ref}: is a Codex hook; Codex files are read-only" if ref.start_with?("codex:")
+      raise Refused, "refused:\n  #{ref}: is not a Claude Code hook" if ref.start_with?("hm:", "ag:")
+
+      hook = Inventory.resolve(candidates(nil), ref)
+      Inventory.mark_protected([hook], @ports.policy) if hook.status.to_s.start_with?("member#")
+      reason = delete_refusal(hook)
+      if reason
+        @refusals << "#{Inventory.describe(hook)}: #{reason}"
+        raise Refused, refusal_text
+      end
+      hook
+    end
+
+    def plan_delete(ref)
+      hook = delete_target(ref)
+      event = hook.event
+      if own_member?(hook)
+        entry = Card.members(@card, event).find { |member| member["id"] == hook.id }
+        raise SettingsChanged, "card changed while planning; run again" unless entry
+
+        @card["events"][event]["members"].delete_if { |member| member.equal?(entry) }
+        last = @card["events"][event]["members"].empty?
+        sync_dispatcher(event)
+        @notes << "removes the card member #{hook.id} from the #{@scope} card"
+        @notes << "the last member is gone, so the #{event} dispatcher entry is removed too" if last
+      else
+        absorb({ hook.id => handler_ref(hook) })
+        @notes << "removes the handler #{hook.id} from #{@settings_path}"
+      end
+      plan = finish
+      HookScript.delete_fields("claude-code", @scope, hook).each { |name, value| plan[name] = value }
+      plan
+    end
+
     def finish
       @settings.delete("hooks") if @settings["hooks"].is_a?(Hash) && @settings["hooks"].empty? && !@hooks_key_present
       before_data = @settings_before
@@ -369,7 +414,7 @@ module Ordonnateur
       end
     end
 
-    def apply(plan)
+    def apply(plan, plan_id: nil)
       return false unless changed?(plan)
 
       plan.verdicts.each do |path, verdict|
@@ -393,6 +438,7 @@ module Ordonnateur
         Harnesses::ClaudeCode.write_file(plan.card_path, plan.card_text_after, mode: 0o600)
       end
       emit(plan)
+      HookScript::Trail.announce_delete(@ports, plan, plan_id, @via, @at)
       true
     end
 

@@ -1,0 +1,26 @@
+schema: rplugin.extension/v1
+id: rdb
+kind: fleet
+catalogue_version: "2.9.0"
+description: Backs ordonnateur's declared provenance port with rdb, the rStack persistence layer on Valkey.
+provides: [provenance]
+confidence: verified
+detect:
+  - command: rdb
+  - path: ~/.rplugins/rdb
+  - path: ~/.rdb
+  - env: RDB_WRITE_URL
+requires: []
+adapters:
+  provenance: lib/provenance.rb
+notes: >
+  Plugin-local extension. Events go to the rdb stream flavor (database 4) as
+  <prefix>:stream:provenance:events, one XADD per event, and snapshots to the
+  persist flavor (database 1) as <prefix>:provenance-snapshot:<digest>, one
+  hash per scope key. The prefix is ORDONNATEUR_RDB_PREFIX, default
+  ordonnateur. URLs and credentials resolve as rdb resolves them
+  (RDB_WRITE_URL, RDB_READ_URL, RDB_USERNAME with RDB_PASSWORD), never printed.
+  Timeouts are named constants: 1 second to connect, 1.5 to read. The adapter speaks the wire protocol itself
+  and loads no rdb code, so it runs under any Ruby. One call is capped at 3
+  seconds and any failure raises Unavailable, so ordonnateur spools. It
+  installs nothing, so plan.sh emits no links. ORDONNATEUR_RDB_DISABLED=1 stops it.

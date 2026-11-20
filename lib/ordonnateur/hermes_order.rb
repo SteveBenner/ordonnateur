@@ -10,6 +10,7 @@ require "yaml"
 
 require_relative "model"
 require_relative "inventory"
+require_relative "hook_script"
 require_relative "harnesses/hermes"
 
 module Ordonnateur
@@ -17,7 +18,8 @@ module Ordonnateur
     Plan = Struct.new(
       :scope, :settings_path, :card_path, :settings_text_before, :settings_text_after, :card_text_before,
       :card_text_after, :settings_sha, :settings_mode, :card_before, :card_after, :verdicts, :refusals,
-      :notes, :event, :before_ids, :after_ids, keyword_init: true
+      :notes, :event, :before_ids, :after_ids, :classification, :needs_confirm, :hold_required, :deleted,
+      keyword_init: true
     )
 
     LAYOUT_REFUSAL = "config.yaml layout is not supported for an in-place reorder"
@@ -190,6 +192,81 @@ module Ordonnateur
       plan
     end
 
+    def plan_delete(ref)
+      raise Refused, "refused:\n  #{ref}: is a Codex hook; Codex files are read-only" if ref.start_with?("codex:")
+      raise Refused, "refused:\n  #{ref}: is not a Hermes hook" if ref.start_with?("cc:", "ag:")
+
+      hook = Inventory.resolve(@hooks, ref)
+      reason = HookScript.hook_refusal(hook)
+      if reason
+        @refusals << "#{Inventory.describe(hook)}: #{reason}"
+        fail!
+      end
+      after_text = delete_rewrite(hook)
+      before_ids = event_hooks(hook.event).map(&:id)
+      after_ids = before_ids - [hook.id]
+      @notes << "removes the entry #{hook.id} from #{@settings_path}"
+      @notes << RESTART_NOTE
+      @notes << "the allowlist is not written; its approval for this command stays in place"
+      plan = Plan.new(
+        scope: @scope, settings_path: @settings_path, card_path: nil, settings_text_before: @text,
+        settings_text_after: after_text, card_text_before: nil, card_text_after: nil,
+        settings_sha: Digest::SHA256.hexdigest(@text.to_s), settings_mode: Harnesses::Hermes.mode_of(@settings_path),
+        card_before: nil, card_after: nil, refusals: @refusals, notes: @notes, event: hook.event,
+        before_ids: before_ids, after_ids: after_ids,
+        **HookScript.delete_fields("hermes", @scope, hook)
+      )
+      plan.verdicts = verdicts_for(plan)
+      plan
+    end
+
+    def delete_rewrite(hook)
+      event = hook.event
+      layout, reason = Harnesses::Hermes.event_layout(@text, event)
+      unless layout
+        @refusals << "#{LAYOUT_REFUSAL} (#{reason})"
+        fail!
+      end
+      if layout[:ranges].length != event_list(event).length
+        @refusals << "#{LAYOUT_REFUSAL} (item count differs from the parsed list)"
+        fail!
+      end
+      lines = layout[:lines]
+      from, to = layout[:ranges][hook.group_index]
+      if layout[:ranges].length == 1
+        after = lines[0...layout[:key_index]].join + lines[to..].join
+      else
+        after = lines[0...from].join + lines[to..].join
+      end
+      prove_delete!(hook, after)
+      after
+    end
+
+    def prove_delete!(hook, after)
+      before = YAML.safe_load(@text, aliases: false)
+      expected = deep_copy(before)
+      expected["hooks"][hook.event].delete_at(hook.group_index)
+      expected["hooks"].delete(hook.event) if expected["hooks"][hook.event].empty?
+      expected["hooks"] = nil if expected["hooks"].empty?
+      actual = YAML.safe_load(after, aliases: false)
+      return if actual == expected
+
+      @refusals << LAYOUT_REFUSAL
+      fail!
+    rescue Psych::Exception, NoMethodError, TypeError
+      @refusals << LAYOUT_REFUSAL
+      fail!
+    end
+
+    def deep_copy(value)
+      case value
+      when Hash then value.each_with_object({}) { |(key, item), out| out[deep_copy(key)] = deep_copy(item) }
+      when Array then value.map { |item| deep_copy(item) }
+      when String then value.dup
+      else value
+      end
+    end
+
     def verdicts_for(plan)
       return [] if plan.settings_text_after == plan.settings_text_before
 
@@ -238,7 +315,7 @@ module Ordonnateur
       end
     end
 
-    def apply(plan)
+    def apply(plan, plan_id: nil)
       return false unless changed?(plan)
 
       plan.verdicts.each do |path, verdict|
@@ -256,7 +333,7 @@ module Ordonnateur
       end
 
       Rplugin::AtomicFile.write(plan.settings_path, plan.settings_text_after, mode: plan.settings_mode || 0o600)
-      emit(plan)
+      plan.deleted ? HookScript::Trail.announce_delete(@ports, plan, plan_id, @via, @at) : emit(plan)
       true
     end
 

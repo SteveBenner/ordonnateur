@@ -36,8 +36,8 @@ ordonnateur is a plugin built on rplugin, the SDK for agent-harness plugins.
   rplugin; `bin/ordonnateur` dispatches `run` before the runtime loads. Everything else loads rplugin and reaches
   capabilities through `Rplugin::Ports.for("ordonnateur", root: <plugin root>)`.
 - ordonnateur never writes to a Codex file. Codex is read-only: inventory, lint, timings and fire only.
-- Hermes: ordonnateur writes `$HERMES_HOME/config.yaml` only to permute the entries of one event, only through a plan
-  (`HermesOrder`), with a backup. It never writes `shell-hooks-allowlist.json`, never passes `--accept-hooks`, and has
+- Hermes: ordonnateur writes `$HERMES_HOME/config.yaml` only to permute the entries of one event or, with `web.hook_edit`
+  on, to delete one unpinned entry, only through a plan (`HermesOrder`), with a backup. It never writes `shell-hooks-allowlist.json`, never passes `--accept-hooks`, and has
   no `run hermes` dispatcher.
 - Antigravity: ordonnateur writes only `<home>/config/hooks.json` and a workspace `.agents/hooks.json` (also `.agent`,
   `_agents`, `_agent`), only through a plan (`AntigravityOrder`), with a backup, plus its own ledger under its state
@@ -53,6 +53,11 @@ ordonnateur is a plugin built on rplugin, the SDK for agent-harness plugins.
   `AntigravityOrder` for Antigravity), the same code as the command line, and `apply` rebuilds the plan, compares its
   id and writes through `Takeover#apply` (`HermesOrder#apply`, `AntigravityOrder#apply`). Never add a route that
   writes a harness file without a plan, and never apply a policy warn or deny from the web.
+- With `web.hook_edit` on (default off, and never changeable from the browser) it also edits a hook's script text and
+  deletes a hook, each as a plan applied after a server-timed three-second hold. Codex, plugin and policy-pinned hooks,
+  and a script a pinned hook runs, are never edited or deleted. Provenance goes through the `provenance` port: the
+  standalone store is the default, and rdb is bound only by `extensions/rdb`. Never call rdb from `lib/`.
 - It is for the person at the browser. An agent never calls its API or starts it to make a change: it gives the user
-  the `ordonnateur order` plan or points them to `ordonnateur web`.
+  the `ordonnateur order` plan, points them to `ordonnateur web`, or uses `ordonnateur hook edit` and `ordonnateur hook
+  delete`, which print a plan and write only with `--apply --confirm <plan id>` after the user's go-ahead.
 - Changing `web/public`: all five canonical themes and the one switcher change in the same change.

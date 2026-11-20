@@ -1,0 +1,59 @@
+od-copy-block {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+od-copy-block .od-cb-label {
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  font-weight: var(--weight-medium);
+}
+
+od-copy-block .od-cb-frame {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--control-sm);
+  padding-inline: var(--space-2) var(--space-1);
+  padding-block: var(--space-1);
+  background: var(--surface-2);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+od-copy-block .od-cb-text {
+  min-width: 0;
+  padding-block: var(--space-1);
+  color: var(--text);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+od-copy-block[data-mode="prose"] .od-cb-text {
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+
+od-copy-block .od-cb-text.mono {
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+od-copy-block .od-cb-text[data-clamped="true"] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--clamp);
+  line-clamp: var(--clamp);
+  overflow: hidden;
+}
+
+od-copy-block od-button[hidden] {
+  display: none;
+}

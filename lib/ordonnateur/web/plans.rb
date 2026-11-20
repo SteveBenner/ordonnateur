@@ -10,10 +10,12 @@ require_relative "../harnesses/antigravity"
 require_relative "../harnesses/claude_code"
 require_relative "../harnesses/hermes"
 require_relative "../hermes_order"
+require_relative "../hook_script"
 require_relative "../inventory"
 require_relative "../lint"
 require_relative "../model"
 require_relative "../overlay"
+require_relative "../script_edit"
 require_relative "../takeover"
 
 module Ordonnateur
@@ -22,13 +24,15 @@ module Ordonnateur
       MAX_PLANS = 200
       TTL = 3600
       MAX_CHANGES = 200
-      OPS = %w[order release guard unguard].freeze
+      OPS = %w[order release guard unguard delete].freeze
+      EDIT_MESSAGE = "editing hooks is turned off; in a terminal run: rplugin settings set ordonnateur web.hook_edit true".freeze
       ANTIGRAVITY_SCOPES = %w[global workspace].freeze
       SCOPES = (%w[user local] + ANTIGRAVITY_SCOPES).freeze
 
       Record = Struct.new(:id, :request, :at, :body, :applied)
 
-      def initialize(ports:, settings:, layout:)
+      def initialize(ports:, settings:, layout:, logger: nil)
+        @logger = logger
         @ports = ports
         @settings = settings
         @layout = layout
@@ -45,10 +49,12 @@ module Ordonnateur
         raise Failure.new(422, "invalid", "workspace scope needs a project") if scope == "workspace" && project.nil?
         raise Failure.new(422, "invalid", "base must be the config fingerprint") unless raw["base"].is_a?(String) && !raw["base"].empty?
 
+        edit_enabled! if deleting?(raw["changes"])
         inventory = @layout.inventory_for(project)
         antigravity = ANTIGRAVITY_SCOPES.include?(scope)
         changes = validate_changes(raw["changes"], inventory, scope)
-        hermes = !antigravity && hermes_draft?(changes, inventory)
+        deleting = changes.any? { |change| change["op"] == "delete" }
+        hermes = !antigravity && !deleting && hermes_draft?(changes, inventory)
         raise Failure.new(422, "invalid", "Hermes plans use scope user") if hermes && scope != "user"
 
         rows = @layout.timing_rows
@@ -60,6 +66,7 @@ module Ordonnateur
           request["harness"] = "antigravity"
           request["file"] = antigravity_file(changes, inventory, scope)
         end
+        delete_request!(request, changes, inventory) if deleting
         at = Time.at(Time.now.to_i).utc
         built = build_or_fail(request, at, project)
         body = describe(built, request, at, inventory, rows, project)
@@ -74,13 +81,43 @@ module Ordonnateur
         record.body
       end
 
-      def apply(id, confirm)
+      def edit_enabled?
+        @settings.on?("web.hook_edit")
+      end
+
+      def edit_enabled!
+        raise Failure.new(403, "edit_disabled", EDIT_MESSAGE) unless edit_enabled?
+      end
+
+      def create_script(hook_id, raw)
+        edit_enabled!
+        project = project_param(raw["project"])
+        base_sha = raw["base_sha"]
+        raise Failure.new(422, "invalid", "base_sha must be the script's sha256") unless base_sha.is_a?(String) && base_sha.match?(/\A\h{64}\z/)
+        raise Failure.new(422, "invalid", "content must be the full new text") unless raw["content"].is_a?(String)
+
+        inventory = @layout.inventory_for(project)
+        hook = inventory.hooks.find { |item| item.id == hook_id }
+        raise Failure.new(404, "not_found", "no such hook") unless hook
+
+        at = Time.at(Time.now.to_i).utc
+        request = { "kind" => "script", "hook" => hook.id, "project" => project, "base_sha" => base_sha, "content" => raw["content"], "scope" => hook.scope }
+        plan = script_plan(request, at)
+        store(Record.new(plan.plan_id, request, at, plan.to_h, false))
+        plan.to_h
+      end
+
+      def apply(id, confirm, gate: nil)
         @apply_lock.synchronize do
           record = find(id)
           raise Failure.new(404, "not_found", "no such plan") unless record
           raise Failure.new(409, "already_applied", "this plan was already applied", { reason: "already_applied" }) if record.applied
           raise Failure.new(403, "disabled", "ordonnateur web is disabled", { reason: "disabled" }) unless @settings.on?("web.enabled")
 
+          if record.body["hold_required"]
+            edit_enabled!
+            gate&.call
+          end
           rebuilt = rebuild(record)
           check_unchanged!(record, rebuilt)
           check_confirm!(record, confirm)
@@ -100,12 +137,41 @@ module Ordonnateur
         value
       end
 
+      def deleting?(raw)
+        raw.is_a?(Array) && raw.any? { |item| item.is_a?(Hash) && item["op"] == "delete" }
+      end
+
+      def validate_delete(raw, by_id, scope)
+        unless raw.length == 1 && raw.first.is_a?(Hash) && raw.first["op"] == "delete"
+          raise Failure.new(422, "invalid", "a draft with a delete holds exactly that one delete and no other change")
+        end
+
+        item = raw.first
+        hook = known_hook(item["hook"], by_id)
+        reason = HookScript.hook_refusal(hook)
+        raise Failure.new(422, "refused", "#{hook.id} #{reason}", { refusals: ["#{hook.id}: #{reason}"] }) if reason
+
+        stray = hook.harness == "hermes" ? scope != "user" : hook.scope != scope
+        raise Failure.new(422, "invalid", "#{hook.id} is in the #{hook.scope} hooks, not the #{scope} hooks of this plan") if stray
+
+        [{ "op" => "delete", "hook" => hook.id }]
+      end
+
+      def delete_request!(request, changes, inventory)
+        hook = inventory.hooks.find { |item| item.id == changes.first["hook"] }
+        request["delete"] = hook.id
+        request["harness"] = hook.harness if %w[hermes antigravity].include?(hook.harness)
+        request["file"] = hook.source_file if hook.harness == "antigravity" && request["scope"] == "workspace"
+      end
+
       def validate_changes(raw, inventory, scope)
         unless raw.is_a?(Array) && !raw.empty? && raw.length <= MAX_CHANGES
           raise Failure.new(422, "invalid", "changes must be a list of 1 to #{MAX_CHANGES} changes")
         end
 
         by_id = inventory.hooks.to_h { |hook| [hook.id, hook] }
+        return validate_delete(raw, by_id, scope) if deleting?(raw)
+
         if ANTIGRAVITY_SCOPES.include?(scope)
           changes = raw.map { |item| normalize_antigravity(item, by_id, scope) }
           check_events!(changes, by_id)
@@ -298,7 +364,50 @@ module Ordonnateur
         Takeover.new(scope: request["scope"], project: root, ports: @ports, cwd: cwd, via: "web", at: at)
       end
 
+      def build_delete(request, at)
+        id = request["delete"]
+        engine =
+          case request["harness"]
+          when "hermes"
+            HermesOrder.new(ports: @ports, cwd: Dir.home, via: "web", at: at)
+          when "antigravity"
+            scope = request["scope"]
+            project = request["project"]
+            cwd = scope == "workspace" ? Harnesses::ClaudeCode.project_root(project) : Dir.home
+            AntigravityOrder.new(
+              scope: scope, project: project || Web.empty_root, ports: @ports, cwd: cwd, via: "web", at: at, file: request["file"]
+            )
+          else
+            takeover_for(request, at)
+          end
+        plan = engine.plan_delete(id)
+        orders = request["harness"] ? [{ "event" => plan.event, "before" => plan.before_ids, "after" => plan.after_ids }] : []
+        { takeover: engine, plan: plan, plan_id: plan_id(plan), orders: orders }
+      end
+
+      def script_plan(request, at)
+        project = request["project"]
+        inventory = @layout.inventory_for(project)
+        hook = inventory.hooks.find { |item| item.id == request["hook"] }
+        raise Failure.new(404, "not_found", "no such hook") unless hook
+
+        engine = ScriptEdit.new(ports: @ports, via: "web", at: at, cwd: project || Dir.home)
+        engine.plan(
+          hook: hook, hooks: inventory.hooks, content: request["content"], base_sha: request["base_sha"],
+          project_root: project ? inventory.root : nil
+        )
+      rescue ScriptEdit::BaseMoved => e
+        @logger&.error("plans: #{e.class}: #{e.message}")
+        raise Failure.new(409, "base_moved", "the script changed since the text was read")
+      rescue Refused => e
+        @logger&.error("plans: #{e.class}: #{e.message}")
+        raise Failure.new(422, "refused", "the change is refused", { refusals: ["the script edit is refused"] })
+      rescue Usage => e
+        raise Failure.new(422, "invalid", e.message)
+      end
+
       def build(request, at)
+        return build_delete(request, at) if request["delete"]
         return build_hermes(request, at) if request["harness"] == "hermes"
         return build_antigravity(request, at) if request["harness"] == "antigravity"
 
@@ -430,8 +539,12 @@ module Ordonnateur
       end
 
       def rebuild(record)
+        if record.request["kind"] == "script"
+          plan = script_plan(record.request, record.at)
+          return { takeover: nil, plan: plan, plan_id: plan.plan_id }
+        end
         build(record.request, record.at)
-      rescue Refused, Usage, SettingsChanged, HarnessFileError
+      rescue Failure, Refused, Usage, SettingsChanged, HarnessFileError
         raise Failure.new(409, "plan_changed", "the hook settings changed after this plan was made", { reason: "plan_changed" })
       end
 
@@ -454,10 +567,11 @@ module Ordonnateur
           "card_sha_before" => Digest::SHA256.hexdigest(plan.card_text_before.to_s),
           "card_text_after" => plan.card_text_after, "verdicts" => verdict_rows(plan)
         }
-        "pl_#{Digest::SHA256.hexdigest(Canonical.json(data))[0, 16]}"
+        Canonical.plan_id(data)
       end
 
       def classification(plan, built = nil)
+        return plan.classification if plan.classification
         return "reorder" if plan.is_a?(HermesOrder::Plan)
         return built && built[:reorder] ? "reorder" : "change" if plan.is_a?(AntigravityOrder::Plan)
 
@@ -519,7 +633,7 @@ module Ordonnateur
         after_ids = after.map { |item| item["id"] }
         {
           "plan_id" => built[:plan_id], "scope" => request["scope"], "project" => project, "classification" => kind,
-          "needs_confirm" => kind == "change", "applicable" => reason.nil?, "blocked_reason" => reason,
+          "needs_confirm" => kind == "change", "hold_required" => plan.hold_required == true, "applicable" => reason.nil?, "blocked_reason" => reason,
           "files" => file_rows(takeover, plan), "verdicts" => verdicts, "card_before" => plan.card_before,
           "card_after" => plan.card_after,
           "lint" => { "before" => before, "after" => after, "added" => after_ids - before_ids, "resolved" => before_ids - after_ids },
@@ -563,13 +677,32 @@ module Ordonnateur
         end
       end
 
+      def write_script(record, rebuilt)
+        engine = ScriptEdit.new(ports: @ports, via: "web", at: record.at, cwd: record.request["project"] || Dir.home)
+        begin
+          result = engine.apply(rebuilt[:plan])
+        rescue SettingsChanged
+          raise Failure.new(409, "plan_changed", "the script changed after this plan was made", { reason: "plan_changed" })
+        rescue Refused => e
+          @logger&.error("plans: #{e.class}: #{e.message}")
+          raise Failure.new(422, "refused", "the script edit is refused", { refusals: ["the script edit is refused"] })
+        end
+        record.applied = true
+        {
+          "plan_id" => record.id, "applied" => true, "files" => [result[:path]], "backups" => [result[:backup]],
+          "fingerprint" => @layout.fingerprint(record.request["project"])
+        }
+      end
+
       def write(record, rebuilt)
+        return write_script(record, rebuilt) if record.request["kind"] == "script"
+
         takeover = rebuilt[:takeover]
         plan = rebuilt[:plan]
         backups_dir = File.join(Rplugin::Paths.state_home, "ordonnateur", "backups")
         known = Dir.glob(File.join(backups_dir, "*"))
         begin
-          takeover.apply(plan)
+          takeover.apply(plan, plan_id: record.id)
         rescue Refused => e
           raise Failure.new(422, "refused", e.message, { refusals: [e.message] })
         rescue SettingsChanged

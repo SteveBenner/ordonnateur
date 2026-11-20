@@ -1,0 +1,172 @@
+od-provenance-timeline {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+od-provenance-timeline .od-pt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--control-sm);
+}
+
+od-provenance-timeline .od-pt-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+od-provenance-timeline .od-pt-honesty {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+od-provenance-timeline .od-pt-honesty .od-icon {
+  margin-block: calc((var(--lh-xs) - var(--icon)) / 2);
+}
+
+od-provenance-timeline .od-pt-loading {
+  display: grid;
+  gap: var(--space-2);
+}
+
+od-provenance-timeline .od-pt-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+od-provenance-timeline col.od-pt-time,
+od-provenance-timeline col.od-pt-how {
+  width: var(--list-col-text);
+}
+
+od-provenance-timeline col.od-pt-kind {
+  width: var(--list-col-num-wide);
+}
+
+od-provenance-timeline .od-pt-table th,
+od-provenance-timeline .od-pt-table td {
+  min-height: var(--row);
+  padding: var(--space-1) var(--space-2);
+  border-bottom: var(--border-w) solid var(--border);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  text-align: start;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+od-provenance-timeline .od-pt-table th {
+  height: var(--row-compact);
+  color: var(--text-dim);
+  font-weight: var(--weight-medium);
+  text-transform: var(--label-case);
+  letter-spacing: var(--label-track);
+  vertical-align: middle;
+}
+
+od-provenance-timeline .od-pt-time {
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+od-provenance-timeline .od-pt-table th.od-pt-kind,
+od-provenance-timeline .od-pt-table td.od-pt-kind {
+  padding-inline: 0;
+  vertical-align: top;
+}
+
+od-provenance-timeline .od-pt-kind od-chip {
+  padding-inline: var(--space-1);
+}
+
+od-provenance-timeline .od-pt-sub,
+od-provenance-timeline .od-pt-hint,
+od-provenance-timeline .od-pt-how-sub {
+  color: var(--text-dim);
+}
+
+od-provenance-timeline .od-pt-detail {
+  color: var(--text-dim);
+  font-size: var(--text-2xs);
+  line-height: var(--lh-2xs);
+}
+
+od-provenance-timeline .od-pt-how-sub {
+  display: none;
+}
+
+od-provenance-timeline .od-pt-how {
+  color: var(--text-dim);
+}
+
+@media (max-width: 599px) {
+  od-provenance-timeline th.od-pt-how,
+  od-provenance-timeline td.od-pt-how,
+  od-provenance-timeline col.od-pt-how {
+    visibility: hidden;
+    width: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  od-provenance-timeline .od-pt-how-sub {
+    display: block;
+  }
+
+  od-provenance-timeline .od-pt-table,
+  od-provenance-timeline .od-pt-table tbody,
+  od-provenance-timeline .od-pt-table tr,
+  od-provenance-timeline .od-pt-table td {
+    display: block;
+  }
+
+  od-provenance-timeline .od-pt-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  od-provenance-timeline .od-pt-table tr {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    padding-block: var(--space-2);
+    border-bottom: var(--border-w) solid var(--border);
+  }
+
+  od-provenance-timeline .od-pt-table td {
+    padding: 0;
+    border: 0;
+  }
+
+  od-provenance-timeline .od-pt-table td.od-pt-kind {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  od-provenance-timeline .od-pt-table td.od-pt-time {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  od-provenance-timeline .od-pt-table td.od-pt-what {
+    grid-column: 1 / -1;
+  }
+
+  od-provenance-timeline .od-pt-table td.od-pt-how {
+    display: none;
+  }
+}

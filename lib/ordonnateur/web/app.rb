@@ -8,6 +8,8 @@ require "time"
 require "uri"
 
 require_relative "auth"
+require_relative "hold"
+require_relative "hooks"
 
 module Ordonnateur
   module Web
@@ -34,8 +36,10 @@ module Ordonnateur
 
       Exchange = Struct.new(:req, :res, :id, :session)
 
-      def initialize(context)
+      def initialize(context, hooks: nil, holds: nil)
         @ctx = context
+        @holds = holds || Hold.new
+        @hooks = hooks || Hooks.new(ports: context.ports, settings: context.settings, layout: context.layout, plans: context.plans, logger: context.logger)
       end
 
       def call(req, res)
@@ -269,6 +273,8 @@ module Ordonnateur
         when "fingerprint" then route_fingerprint(exchange, rest)
         when "layout" then route_layout(exchange, rest)
         when "plans" then route_plans(exchange, rest)
+        when "hooks" then route_hooks(exchange, rest)
+        when "provenance" then route_provenance(exchange, rest)
         when "health" then route_health(exchange, rest)
         when "runs" then route_runs(exchange, rest)
         when "proposals" then route_proposals(exchange, rest)
@@ -329,7 +335,10 @@ module Ordonnateur
           "not_sequenceable" => LIFECYCLE["claude-code"].select { |event| refused.include?(event) }
                                                         .to_h { |event| [event, Model.refused_reason(event)] },
           "guard_events" => LIFECYCLE["claude-code"].select { |event| Model::GUARD_EVENTS.include?(event) },
-          "effects_text" => EFFECTS_TEXT
+          "effects_text" => EFFECTS_TEXT,
+          "hook_edit" => @ctx.plans.edit_enabled?,
+          "provenance" => @hooks.provenance_status,
+          "desktop" => @hooks.desktop
         }
       end
 
@@ -399,10 +408,68 @@ module Ordonnateur
           only(exchange, "GET")
           return json(exchange, 200, @ctx.plans.fetch(rest[1]))
         end
-        fail!(404, "not_found", "no such route") unless rest.length == 3 && rest[2] == "apply"
+        fail!(404, "not_found", "no such route") unless rest.length == 3 && %w[apply hold].include?(rest[2])
         fail!(405, "method_not_allowed", "unsupported method") unless method == "POST"
-        confirm = body_object(exchange)["confirm"]
-        json(exchange, 200, @ctx.apply_lock.synchronize { @ctx.plans.apply(rest[1], confirm) })
+        return route_hold(exchange, rest[1]) if rest[2] == "hold"
+
+        body = body_object(exchange)
+        gate = -> { @holds.redeem!(exchange.session, rest[1], body["hold_id"]) }
+        json(exchange, 200, @ctx.apply_lock.synchronize { @ctx.plans.apply(rest[1], body["confirm"], gate: gate) })
+      end
+
+      def route_hold(exchange, id)
+        body_object(exchange)
+        plan = @ctx.plans.fetch(id)
+        fail!(422, "invalid", "this plan needs no hold") unless plan["hold_required"]
+        @ctx.plans.edit_enabled!
+        json(exchange, 201, @holds.start(exchange.session, id))
+      end
+
+      def raw_segments(exchange)
+        exchange.req.request_uri.path.split("/").reject(&:empty?).map { |part| URI::DEFAULT_PARSER.unescape(part) }
+      end
+
+      def route_hooks(exchange, rest)
+        fail!(404, "not_found", "no such route") unless rest.length >= 2
+        parts = raw_segments(exchange)[3..] || []
+        id = parts.first.to_s
+        fail!(404, "not_found", "no such hook") if id.empty?
+        tail = parts[1..]
+        project = project_query(exchange)
+        case tail
+        when []
+          only(exchange, "GET")
+          json(exchange, 200, @hooks.detail(id, project))
+        when ["script"]
+          only(exchange, "GET")
+          bytes, disposition = @hooks.script_download(id, project)
+          send_bytes(exchange, bytes, disposition)
+        when %w[script plan]
+          only(exchange, "POST")
+          json(exchange, 201, @ctx.plans.create_script(id, body_object(exchange)))
+        when ["open"]
+          only(exchange, "POST")
+          json(exchange, 200, @hooks.open_desktop(id, project, body_object(exchange)["target"]))
+        else fail!(404, "not_found", "no such route")
+        end
+      rescue HarnessFileError => e
+        fail!(422, "harness_file_error", e.message)
+      end
+
+      def route_provenance(exchange, rest)
+        fail!(404, "not_found", "no such route") unless rest.length == 1
+        only(exchange, "GET")
+        project_query(exchange)
+        json(exchange, 200, @hooks.provenance(query_pairs(exchange)))
+      end
+
+      def send_bytes(exchange, bytes, disposition)
+        res = exchange.res
+        res.status = 200
+        res["Content-Type"] = "application/octet-stream"
+        res["Content-Disposition"] = disposition
+        res["Content-Length"] = bytes.bytesize.to_s
+        res.body = bytes
       end
 
       def query_pairs(exchange)

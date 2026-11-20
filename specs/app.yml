@@ -1,6 +1,6 @@
 schema_version: 1
 name: ordonnateur
-version: 0.4.0
+version: 0.4.1
 kind: plugin
 purpose: >
   Gives each Claude Code event an ordered card of hooks that ordonnateur runs one after another from a single
@@ -14,8 +14,15 @@ purpose: >
   dimensions and can heal a fixed set of flaws. `ordonnateur plan` interviews the user briefly, reads the whole agent
   setup and offers changes that serve the stated goals, applying only allowlisted Claude Code settings through plans.
   A model explains, ranks and proposes for both verbs; deterministic code gathers the facts and performs every write.
-commands: [list, lint, card, order, move, release, unguard, guard, fire, timings, watch, untangle, plan, run, record, web, version]
+  `ordonnateur web` also opens a hook's script and provenance in a modal with download and open-in-desktop, and, only
+  when web.hook_edit is on, edits a hook's script text or deletes a hook, each through a plan and a three-second
+  press-and-hold. `ordonnateur hook` does the same from the command line for a person or an agent, and
+  `ordonnateur provenance` reports when each hook was first seen, changed, enabled, disabled and removed, from a
+  provenance port whose plugin-local store is the default and whose rdb binding is an extension.
+commands: [list, lint, card, order, move, release, unguard, guard, fire, timings, watch, untangle, plan, run, record, web, hook, provenance, version]
 safety:
+  hook_edit: "Editing a hook's script text and deleting a hook are off until web.hook_edit is true; the browser cannot turn it on. Codex hooks, plugin hooks and hooks a policy engine pins are never edited or deleted. A script a pinned hook runs is never edited. Every edit or delete is a plan with its diff and policy verdict, and the browser applies one only after a server-timed three-second hold."
+  provenance: "Provenance records what ordonnateur observed and did, labeled by how it knows. It never claims an install time it did not see: a first sighting says first seen, not installed. The hot path never loads it."
   terminal_output: "Text the command line prints and watch notifications replace control characters other than newline and tab. JSON output escapes them instead."
   previews: "Building a plan runs no program a repository configures. The Antigravity tracked-file check turns git's filesystem monitor off."
 contracts:

@@ -241,6 +241,77 @@ export async function requestFull(method, path, options = {}) {
   }
 }
 
+function safeFilename(raw, fallback) {
+  const parts = String(raw || "").split(/[\\/:]/);
+  const base = parts[parts.length - 1].replace(/[\u0000-\u001f\u007f]/g, "").trim();
+  return base || fallback || "script";
+}
+
+function dispositionName(header, fallback) {
+  const text = String(header || "");
+  const star = text.match(/filename\*\s*=\s*([^;]+)/i);
+  if (star) {
+    const value = star[1].trim().replace(/^[^']*'[^']*'/, "");
+    try {
+      return safeFilename(decodeURIComponent(value), fallback);
+    } catch (error) {
+      return safeFilename(value, fallback);
+    }
+  }
+  const plain = text.match(/filename\s*=\s*("([^"]*)"|[^;]+)/i);
+  if (plain) return safeFilename(plain[2] !== undefined ? plain[2] : plain[1].trim(), fallback);
+  return safeFilename("", fallback);
+}
+
+export async function requestBlob(path, options = {}) {
+  const url = resolveUrl(path);
+  const timeout = options.timeout || 30000;
+  const headers = { Accept: "application/octet-stream" };
+  if (sessionToken) headers.Authorization = "Bearer " + sessionToken;
+  const started = performance.now();
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeout);
+  const forward = () => controller.abort();
+  if (options.signal) {
+    if (options.signal.aborted) controller.abort();
+    options.signal.addEventListener("abort", forward, { once: true });
+  }
+  let response;
+  let blob = null;
+  let data = null;
+  try {
+    response = await window.fetch(url, { method: "GET", headers, credentials: "omit", cache: "no-store", signal: controller.signal });
+    if (response.ok) blob = await response.blob();
+    else data = await readBody(response);
+  } catch (cause) {
+    const elapsed = Math.round(performance.now() - started);
+    if (timedOut) {
+      const error = timeoutError(elapsed, 1);
+      noteFailure(error, false);
+      throw error;
+    }
+    if (options.signal && options.signal.aborted) throw cause;
+    const error = offlineError(1, elapsed);
+    noteFailure(error, false);
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+    if (options.signal) options.signal.removeEventListener("abort", forward);
+  }
+  const elapsed = Math.round(performance.now() - started);
+  if (!response.ok) {
+    const error = fromResponse(response, data, 1, elapsed);
+    noteFailure(error, false);
+    throw error;
+  }
+  if (app.get().offline) app.set({ offline: false });
+  return { blob, filename: dispositionName(response.headers.get("Content-Disposition"), options.fallback), size: blob.size };
+}
+
 export async function get(path, options) {
   return (await requestFull("GET", path, options)).data;
 }
@@ -278,6 +349,12 @@ export const endpoints = {
   layout: (params) => `/layout${query(params)}`,
   plans: "/plans",
   plan: (id) => `/plans/${enc(id)}`,
+  hold: (id) => `/plans/${enc(id)}/hold`,
+  hook: (id, params) => `/hooks/${enc(id)}${query(params)}`,
+  hookScript: (id) => `/hooks/${enc(id)}/script`,
+  hookOpen: (id) => `/hooks/${enc(id)}/open`,
+  hookScriptPlan: (id) => `/hooks/${enc(id)}/script/plan`,
+  provenance: (params) => `/provenance${query(params)}`,
   apply: (id) => `/plans/${enc(id)}/apply`,
   health: (params) => `/health${query(params)}`,
   runs: "/runs",

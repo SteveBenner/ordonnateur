@@ -303,7 +303,7 @@ col.od-col-timeout {
 
 .od-hook-line {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-2);
   min-width: 0;
   white-space: nowrap;
@@ -324,6 +324,12 @@ col.od-col-timeout {
 .od-hook-line .od-program:hover {
   text-decoration: underline;
   text-underline-offset: var(--space-1);
+}
+
+.od-hook-line .od-details-btn {
+  flex: none;
+  margin-inline-start: auto;
+  align-self: center;
 }
 
 .od-hook-line .od-draft-mark {

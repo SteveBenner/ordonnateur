@@ -8,8 +8,9 @@ import "./od-tooltip.js";
 import { allowedActions, perform } from "./od-hook-menu.js";
 import { shell } from "../core/plans.js";
 import { announce } from "../core/announce.js";
+import { MOVE_SLOP_PX, OPEN_DELAY_MS } from "../core/hook-detail.js";
 import { providerKey, providerMeta } from "../core/sources.js";
-import { HARNESS_LABELS, findingIndex, isAntigravity, isHermes, isMember, isPinned, memberPosition, pinReason, program, statusOf } from "../core/hooks.js";
+import { HARNESS_LABELS, findingIndex, isAntigravity, isHermes, isMember, isPinned, memberPosition, nextId, pinReason, program, statusOf } from "../core/hooks.js";
 
 const WIDE = "(min-width: 1024px)";
 
@@ -266,12 +267,85 @@ class OdInspector extends HTMLElement {
 
   command(hook) {
     const node = section("Command");
+    const title = node.querySelector(".od-insp-label");
+    const head = el("div", "od-insp-head");
+    node.insertBefore(head, title);
+    head.append(title);
+    const details = document.createElement("od-button");
+    details.setAttribute("variant", "ghost");
+    details.setAttribute("size", "xs");
+    details.setAttribute("icon", "file");
+    details.dataset.action = "details";
+    details.text = "Details";
+    details.addEventListener("click", () => this.openDetails(hook, details, "overview"));
+    head.append(details);
     const text = typeof hook.command === "string" && hook.command ? hook.command : Array.isArray(hook.args) ? hook.args.join(" ") : "";
     const block = el("pre", "od-insp-command mono", text || "Not set");
     block.tabIndex = 0;
     block.setAttribute("aria-label", "Full command");
-    node.append(block);
+    const hint = el("span", "visually-hidden", "Click or press Enter to open the script and details.");
+    hint.id = nextId("od-insp-command-hint");
+    block.setAttribute("aria-describedby", hint.id);
+    this.bindCommand(block, hook);
+    node.append(block, hint);
     return node;
+  }
+
+  openDetails(hook, trigger, tab) {
+    const restore = () => this.content && this.content.querySelector('[data-action="details"]');
+    document.dispatchEvent(new CustomEvent("od-hook-details", { detail: { hook, trigger, tab, restore } }));
+  }
+
+  bindCommand(block, hook) {
+    let timer = 0;
+    let down = null;
+    const disarm = () => {
+      window.clearTimeout(timer);
+      timer = 0;
+      document.removeEventListener("selectionchange", onSelection);
+      document.removeEventListener("pointerdown", onOutside, true);
+      document.removeEventListener("keydown", onKey, true);
+    };
+    const selected = () => {
+      const selection = window.getSelection();
+      return Boolean(selection && !selection.isCollapsed && selection.toString());
+    };
+    const onSelection = () => {
+      if (selected()) disarm();
+    };
+    const onOutside = (event) => {
+      if (event.target !== block) disarm();
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") disarm();
+    };
+    block.addEventListener("pointerdown", (event) => {
+      down = { x: event.clientX, y: event.clientY };
+    });
+    block.addEventListener("contextmenu", disarm);
+    block.addEventListener("dblclick", disarm);
+    block.addEventListener("click", (event) => {
+      if (event.detail > 1) {
+        disarm();
+        return;
+      }
+      if (selected()) return;
+      if (down && Math.hypot(event.clientX - down.x, event.clientY - down.y) > MOVE_SLOP_PX) return;
+      disarm();
+      document.addEventListener("selectionchange", onSelection);
+      document.addEventListener("pointerdown", onOutside, true);
+      document.addEventListener("keydown", onKey, true);
+      timer = window.setTimeout(() => {
+        disarm();
+        this.openDetails(hook, block, "script");
+      }, OPEN_DELAY_MS);
+    });
+    block.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
+      event.preventDefault();
+      disarm();
+      this.openDetails(hook, block, "script");
+    });
   }
 
   settings(hook, context) {

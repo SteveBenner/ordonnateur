@@ -64,6 +64,20 @@ a new hook to the harness's own settings.
 
 A hook is named by its full id, a unique 8-hex suffix, or a unique substring of its command.
 
+## Editing or deleting a hook
+
+- `ordonnateur hook show <id> [--content] [--json]` reads a hook, its script, and whether the script may be edited or
+  the hook deleted. `ordonnateur provenance [<id>]` lists when the hook was first seen, changed, edited or deleted.
+- `ordonnateur hook edit <id> (--from-file PATH | --stdin)` and `ordonnateur hook delete <id>` print a plan with the
+  diff, the policy verdicts and a plan id, and write nothing. Run `hook show --content` first, write the new script
+  text to a file, then run `hook edit`. Show the user the diff and the verdict.
+- Apply only on the user's go-ahead, with `--apply --confirm <plan id>`. `--apply` without a matching `--confirm`
+  exits 2. A warn or deny verdict is never applied.
+- Never call the web API to edit or delete a hook.
+- Both verbs refuse while `web.hook_edit` is false. Only the user turns it on, in a terminal, with
+  `rplugin settings set ordonnateur web.hook_edit true`; never change it yourself.
+- Codex, plugin, policy-pinned and dispatcher hooks, and a script a pinned hook also runs, are never edited or deleted.
+
 ## What it needs
 
 - Claude Code is the only harness it sequences, in the user scope and the local scope. Project settings, managed

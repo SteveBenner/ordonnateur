@@ -15,7 +15,7 @@ function icon(name) {
 let sequence = 0;
 
 class OdButton extends HTMLElement {
-  static observedAttributes = ["icon", "label", "disabled", "busy", "busy-label", "reason", "type", "write"];
+  static observedAttributes = ["icon", "label", "disabled", "busy", "busy-label", "reason", "type", "write", "expanded", "controls"];
 
   connectedCallback() {
     if (this.button) {
@@ -133,6 +133,10 @@ class OdButton extends HTMLElement {
     else this.button.removeAttribute("aria-disabled");
     if (busy) this.button.setAttribute("aria-busy", "true");
     else this.button.removeAttribute("aria-busy");
+    if (this.hasAttribute("expanded")) this.button.setAttribute("aria-expanded", this.getAttribute("expanded") === "false" ? "false" : "true");
+    else this.button.removeAttribute("aria-expanded");
+    if (this.hasAttribute("controls")) this.button.setAttribute("aria-controls", this.getAttribute("controls"));
+    else this.button.removeAttribute("aria-controls");
     const reason = locked ? READ_ONLY_REASON : this.getAttribute("reason");
     const tip = disabled && reason ? reason : !text && label ? label : "";
     if (tip) this.tooltip.setAttribute("text", tip);

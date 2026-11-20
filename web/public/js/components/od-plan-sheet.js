@@ -74,7 +74,7 @@ export function diffRows(text) {
   });
 }
 
-function blockedText(plan, override) {
+export function blockedText(plan, override) {
   const reason = override ? override.code : plan.blocked_reason;
   if (!reason) return "";
   if (reason === "nothing_to_apply") return "Nothing would change.";

@@ -5,6 +5,7 @@ import "./od-state.js";
 import "./od-command.js";
 import * as draft from "../core/draft.js";
 import { announce } from "../core/announce.js";
+import { openDetails } from "./od-hook-menu.js";
 import { nextSort, readSort, saveSort, sortRows } from "../core/sort.js";
 import { providerKey, providerMeta, rowKeyOfHook } from "../core/sources.js";
 import {
@@ -142,6 +143,13 @@ function hookRow(hook, index, context, drafted, position) {
     matcher.title = hook.matcher;
     line.append(matcher);
   }
+  const details = document.createElement("od-icon-button");
+  details.setAttribute("icon", "file");
+  details.setAttribute("size", "xs");
+  details.setAttribute("label", `Details for ${names.base}`);
+  details.classList.add("od-details-btn");
+  details.addEventListener("click", () => openDetails(hook, details));
+  line.append(details);
   cell.append(line);
   const sub = el("span", "od-hook-sub");
   const subChip = chipFor(hook);
@@ -204,9 +212,15 @@ function hookRow(hook, index, context, drafted, position) {
   const select = () => document.dispatchEvent(new CustomEvent("od-hook-select", { detail: { hook, trigger: name } }));
   name.addEventListener("click", select);
   name.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
+    if (event.key === "Enter" && event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault();
+      openDetails(hook, name);
+    } else if (event.key === "Enter") {
       event.preventDefault();
       select();
+    } else if (event.key === "d" && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault();
+      openDetails(hook, name);
     } else if (event.key === "." || (event.key === "F10" && event.shiftKey)) {
       event.preventDefault();
       more.dispatchEvent(new CustomEvent("od-hook-action", { bubbles: true, detail: { action: "menu", hook, trigger: name, context } }));

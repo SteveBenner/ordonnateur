@@ -14,6 +14,7 @@ const MATRIX = [
   { keys: "s", description: "Sequence a native hook" },
   { keys: "r", description: "Release a member" },
   { keys: "g", description: "Guard or unguard" },
+  { keys: "d", description: "Open the hook details (matrix and list)" },
 ];
 
 const SOURCES = [

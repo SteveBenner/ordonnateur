@@ -3,6 +3,7 @@ import "./components/od-session-gate.js";
 import "./components/od-inspector.js";
 import "./components/od-tray.js";
 import "./components/od-plan-sheet.js";
+import "./components/od-hook-detail.js";
 import "./core/theme.js";
 import { app } from "./core/store.js";
 import { bootSession, watchLinks } from "./core/session.js";

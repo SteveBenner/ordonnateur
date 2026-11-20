@@ -23,6 +23,10 @@ module Ordonnateur
       JSON.generate(sort(value))
     end
 
+    def plan_id(data)
+      "pl_#{Digest::SHA256.hexdigest(json(data))[0, 16]}"
+    end
+
     def hex(matcher, hook)
       Digest::SHA256.hexdigest(json({ "matcher" => matcher, "hook" => hook }))
     end

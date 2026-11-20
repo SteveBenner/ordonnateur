@@ -132,3 +132,11 @@ od-button .od-native[aria-busy="true"]::before {
 od-button .od-text[hidden] {
   display: none;
 }
+
+od-button[block] {
+  display: flex;
+}
+
+od-button[block] .od-native {
+  width: 100%;
+}

@@ -73,6 +73,11 @@ session-start watch hook once (`hermes hooks`); ordonnateur never writes Hermes'
 - `ordonnateur run claude-code <Event> --card <path>` is the dispatcher hook; `ordonnateur record` stores a run.
 - `ordonnateur web [--bind ADDR] [--port N] [--public-origin URL] [--expose] [--open] [--read-only] [--json]` serves
   the web app; `ordonnateur web url` prints a fresh one-time link for the running server.
+- `ordonnateur hook show <id> [--content] [--json]` shows a hook's script and where it came from.
+  `ordonnateur hook edit <id> (--from-file PATH | --stdin)` and `ordonnateur hook delete <id>` print a plan and write
+  only with `--apply --confirm <plan id>`; both need `web.hook_edit`, which is off until you turn it on.
+- `ordonnateur provenance [<hook id>] [--limit N] [--json]` lists when each hook was first seen, changed, enabled,
+  disabled, edited, deleted or removed.
 - `ordonnateur untangle [--harness H] [--project DIR] [--heal] [--apply] [--no-model] [--json]` reports hook health and
   can heal a fixed set of flaws; see [Untangle and plan](#untangle-and-plan).
 - `ordonnateur plan [--project DIR] [--answers FILE] [--questions] [--reinterview] [--no-interview] [--proposals FILE] [--apply IDS] [--scope user|local] [--allow-widening] [--no-model] [--json]`
@@ -101,7 +106,7 @@ which is stricter than Claude Code.
 ## The web app
 
 `ordonnateur web` serves a local web app that shows every hook as a layout and changes Claude Code, Hermes and
-Antigravity hook order only through plans. It reads the same files the command line reads and writes through the same code as `order`, `move`,
+Antigravity hook order, and, once you turn it on, a hook's script or the hook itself, only through plans. It reads the same files the command line reads and writes through the same code as `order`, `move`,
 `release`, `guard` and `unguard`; it has no database. The contract is `specs/web.yml`.
 
 - **The layout.** The map has one table per harness. Its columns are the harness's events in lifecycle order and its
@@ -127,6 +132,19 @@ Antigravity hook order only through plans. It reads the same files the command l
   409 and nothing is written. A reorder inside an event that is already sequenced applies on one click. Sequencing a
   hook, releasing an event, and guard or unguard need the plan id typed. A policy warn or deny is never applied from
   the web; Codex stays read-only.
+- **A hook's script and history.** Click a hook's command, its Details button, or Details in its menu (or press `d`) to
+  open a modal: Overview, Script, Provenance and Edit. Script shows the file the hook runs, with Download and Open in
+  desktop (which asks the computer that runs the server, so it is absent when that computer has no display).
+  Provenance lists when ordonnateur first saw the hook, when it changed, when it was enabled or disabled and when it
+  went away, and says how it knows. It records a first sighting, never an install time, because hook files carry none.
+  By default it keeps this in a local file; set `provenance.backend` to `extension` to use an extension's store, such as
+  `extensions/rdb`.
+- **Editing and deleting.** Off until you run `rplugin settings set ordonnateur web.hook_edit true` in a terminal; the
+  browser cannot turn it on. Then the Edit tab opens with the `ordonnateur hook` commands and a prompt to give an AI
+  model, which edits more safely than a text box, and only afterward offers editing by hand. Saving a script or
+  deleting a hook builds a plan with its diff and policy verdict, and needs a three-second press-and-hold that the
+  server times. Delete works on Claude Code, Hermes and Antigravity hooks you own. Codex hooks, plugin hooks, hooks your
+  policy engine pins, and a script a pinned hook runs are never changed.
 - **Antigravity.** Rows are Global hooks, each workspace file, each plugin and Disabled plugins; inside a cell the
   hooks group by hook spec, and the `ordonnateur` spec is a numbered frame. A cell whose hooks come from two or more
   specs is marked, because Antigravity runs them in an order that changes every session. Drag inside a spec, or Move
@@ -138,8 +156,8 @@ Antigravity hook order only through plans. It reads the same files the command l
   new link, and signing out ends only that tab's session. Every change also carries an `Origin` and a `Host` that name the server, so a page on another site cannot
   reach it. A session may make 30 changes a minute. `--read-only` and `ORDONNATEUR_WEB_DISABLED=1` turn writing and
   the app off. A bind address that is not loopback needs `--expose`, a terminal and the typed phrase
-  `expose ordonnateur web`. An agent never drives the API: it gives the user the `order` plan or points them to
-  `ordonnateur web`.
+  `expose ordonnateur web`. An agent never drives the API: it gives the user the `order` plan, points them to
+  `ordonnateur web`, or uses `ordonnateur hook edit` and `ordonnateur hook delete`.
 - **Hosting.** Behind a reverse proxy, set `web.public_origin` to the one HTTPS origin the proxy publishes; links and the
   `Host` and `Origin` checks then use it. The plugin does not start a proxy or supervise
   the server; run it from your own supervisor.
@@ -208,7 +226,9 @@ that use the powershell shell are not absorbed, and neither is any hook while ma
 `ORDONNATEUR_WATCH_DISABLED`), `alerts.failures` and `events.runs`; for `untangle` and `plan`, `untangle.heal`,
 `advisor.backend`, `advisor.harness` and `advisor.model`; for the web app, `web.enabled` (kill switch
 `ORDONNATEUR_WEB_DISABLED`), `web.bind`, `web.port` (default 7422), `web.public_origin`, `web.theme`, `web.projects`
-(colon-separated project roots) and `web.discover`. `ordonnateur web` loads the WEBrick copy in `vendor/webrick`
+(colon-separated project roots), `web.discover` and `web.hook_edit` (off; kill switch
+`ORDONNATEUR_HOOK_EDIT_DISABLED`); `provenance.enabled` (kill switch `ORDONNATEUR_PROVENANCE_DISABLED`) and
+`provenance.backend` (`local`, or `extension`; `ORDONNATEUR_PROVENANCE_BACKEND` overrides it). `ordonnateur web` loads the WEBrick copy in `vendor/webrick`
 (Ruby and BSD-2-Clause licenses, see `vendor/VERSIONS.yml`); no other command does.
 
 ## License

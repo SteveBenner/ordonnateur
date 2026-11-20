@@ -17,9 +17,12 @@ module Ordonnateur
     class Layout
       TIMING_KEYS = %w[runs p50 p95 max failures slow near_timeout].freeze
 
+      attr_writer :observer
+
       def initialize(ports:, settings:)
         @ports = ports
         @settings = settings
+        @observer = nil
       end
 
       def self.finding_id(finding)
@@ -81,6 +84,10 @@ module Ordonnateur
       end
 
       def build(project)
+        build_full(project).first
+      end
+
+      def build_full(project, observe: true)
         inventory = inventory_for(project)
         rows = timing_rows
         found = findings(inventory, rows)
@@ -104,7 +111,7 @@ module Ordonnateur
           notes << "#{entry[:path]}: #{entry[:error]}" if entry && entry[:error]
           [scope, entry && entry[:card] ? { "path" => entry[:path], "card" => entry[:card] } : nil]
         end
-        {
+        payload = {
           "fingerprint" => fingerprint_of(inventory, rows),
           "project" => project ? inventory.root : nil,
           "settings_files" => settings_files(project, inventory),
@@ -113,6 +120,8 @@ module Ordonnateur
           "findings" => found,
           "notes" => notes
         }
+        @observer&.on_layout(inventory, project) if observe
+        [payload, inventory]
       end
     end
   end

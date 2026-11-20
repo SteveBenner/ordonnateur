@@ -1,0 +1,65 @@
+od-code-view {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  block-size: 100%;
+  background: var(--control-bg);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+od-code-view .od-cv-scroll {
+  display: grid;
+  grid-template-columns: calc(var(--digits, 2) * 1ch + 2 * var(--space-2)) max-content;
+  align-content: start;
+  block-size: 100%;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+od-code-view .od-cv-scroll:focus-visible {
+  outline-offset: calc(-1 * var(--focus-w));
+}
+
+od-code-view .od-cv-gutter,
+od-code-view .od-cv-code {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  tab-size: 4;
+  white-space: pre;
+}
+
+od-code-view .od-cv-gutter {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  padding-inline: var(--space-2);
+  background: var(--surface-2);
+  border-inline-end: var(--border-w) solid var(--border);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  user-select: none;
+}
+
+od-code-view .od-cv-code {
+  min-width: 0;
+  padding-inline: var(--space-2);
+  color: var(--text);
+}
+
+od-code-view .od-cv-code code {
+  font: inherit;
+}
+
+od-code-view .od-cv-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: var(--space-2);
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}

@@ -1,0 +1,108 @@
+:root {
+  --ed-lh: var(--lh-xs);
+  --ed-fs: var(--text-xs);
+}
+
+od-code-editor {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+od-code-editor .od-box {
+  display: grid;
+  grid-template-columns: calc(var(--digits, 2) * 1ch + 2 * var(--space-2)) minmax(0, 1fr);
+  min-width: 0;
+  background: var(--control-bg);
+  border: var(--border-w) solid var(--control-border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  overflow: hidden;
+}
+
+od-code-editor .od-box:hover {
+  border-color: var(--text-dim);
+}
+
+od-code-editor .od-box:has(textarea:focus) {
+  border-color: var(--focus-ring);
+  outline: var(--focus-w) solid var(--focus-ring);
+  outline-offset: 0;
+}
+
+od-code-editor:has(textarea[aria-invalid="true"]) .od-box {
+  border-color: var(--danger);
+}
+
+od-code-editor:has(textarea:read-only:not(:disabled)) .od-box {
+  background: transparent;
+  border-color: var(--border);
+}
+
+od-code-editor:has(textarea:disabled) .od-box {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+od-code-editor .od-ce-gutter {
+  margin: 0;
+  padding-inline: var(--space-2);
+  background: var(--surface-2);
+  border-inline-end: var(--border-w) solid var(--border);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--ed-fs);
+  line-height: var(--ed-lh);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  user-select: none;
+}
+
+od-code-editor .od-native {
+  display: block;
+  min-width: 0;
+  min-block-size: calc(8 * var(--ed-lh));
+  padding: 0 var(--space-2);
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--ed-fs);
+  line-height: var(--ed-lh);
+  tab-size: 4;
+  white-space: pre;
+  resize: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+od-code-editor .od-native:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+
+od-code-editor .od-message {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--lh-xs);
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+}
+
+od-code-editor .od-message[data-kind="error"] {
+  color: var(--danger);
+}
+
+od-code-editor .od-message[hidden] {
+  display: none;
+}
+
+@media (max-width: 767px) and (pointer: coarse) {
+  od-code-editor {
+    --ed-lh: var(--lh-lg);
+    --ed-fs: var(--text-lg);
+  }
+}

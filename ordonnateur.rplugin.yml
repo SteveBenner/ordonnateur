@@ -1,13 +1,13 @@
 schema: rplugin/v1
 id: ordonnateur
 name: ordonnateur
-version: 0.4.0
+version: 0.4.1
 rplugin: ">= 1.19.0"
 native: true
 description: Puts each harness event's hooks in the order you choose, lists, lints, times and test-fires every hook, and checks, heals and tunes an agent setup.
 ports:
   required: [state, policy]
-  optional: [events, notify, folder_picker, author]
+  optional: [events, notify, folder_picker, author, provenance]
   declared:
     - name: author
       summary: Gives untangle and plan a model, through a harness CLI with no tools by default, or a fleet extension's adapter when advisor.backend is extension.
@@ -15,6 +15,9 @@ ports:
     - name: policy
       summary: Judges ordonnateur's own writes and test-fires against the host's policy engine and names the hooks it must never absorb.
       standalone: { file: lib/ordonnateur/policy/standalone.rb, class: Ordonnateur::Policy::Standalone }
+    - name: provenance
+      summary: Keeps the record of when each hook was first seen, changed, enabled, disabled, edited, deleted and removed. The standalone store is a file under the state home; an extension adapter keeps it elsewhere (rdb on rStack hosts).
+      standalone: { file: lib/ordonnateur/provenance/standalone.rb, class: Ordonnateur::Provenance::Standalone }
     - name: folder_picker
       summary: Lists the folders of a directory for the web app's Select a Folder picker and says which picker component a host serves.
       standalone: { file: lib/ordonnateur/folder_picker/standalone.rb, class: Ordonnateur::FolderPicker::Standalone }
@@ -38,6 +41,9 @@ settings:
   - { key: web.theme, type: enum, options: [system, apple-noir, apple-austere, tronwave, minimal-dark, minimal-light], default: system, scopes: [machine], description: "Theme ordonnateur web shows on a first visit; the viewer's own choice in the browser wins." }
   - { key: web.projects, type: string, default: "", scopes: [machine], description: "Colon-separated absolute project roots whose local scope ordonnateur web always lists." }
   - { key: web.discover, type: bool, default: true, scopes: [machine], description: "Lists the projects Claude Code knows by reading only the keys of the projects object in its state file." }
+  - { key: web.hook_edit, type: bool, default: false, scopes: [machine], kill_switch: ORDONNATEUR_HOOK_EDIT_DISABLED, description: "Lets ordonnateur web edit a hook's script text and delete a hook, each through a plan and a three-second hold. Off by default; the browser cannot turn it on." }
+  - { key: provenance.enabled, type: bool, default: true, scopes: [machine], kill_switch: ORDONNATEUR_PROVENANCE_DISABLED, description: "Records when each hook was first seen, changed, enabled, disabled, edited, deleted and removed." }
+  - { key: provenance.backend, type: enum, options: [local, extension], default: local, scopes: [machine], description: "Where provenance is kept: local is a file under the state home, and extension uses the provenance port's extension adapter (rdb on rStack hosts). ORDONNATEUR_PROVENANCE_BACKEND overrides it." }
   - { key: untangle.heal, type: enum, options: ["off", plan, auto], default: "off", scopes: [machine], description: "What untangle may heal: off reports only, plan prints heal plans and applies them with --heal --apply, and auto also applies the built-in safe healers on every untangle run. ORDONNATEUR_HEAL_DISABLED=1 behaves as off." }
   - { key: advisor.backend, type: enum, options: [harness, extension], default: harness, scopes: [machine], description: "Where untangle and plan get a model: harness runs a harness CLI with no tools, and extension uses the author port's extension adapter (rLLM on rStack hosts). ORDONNATEUR_ADVISOR_DISABLED=1 turns the model off." }
   - { key: advisor.harness, type: enum, options: [claude, codex], default: claude, scopes: [machine], description: "The harness CLI the harness backend runs." }

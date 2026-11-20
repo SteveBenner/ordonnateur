@@ -11,6 +11,7 @@ require "tmpdir"
 require_relative "model"
 require_relative "canonical"
 require_relative "inventory"
+require_relative "hook_script"
 require_relative "harnesses/antigravity"
 
 module Ordonnateur
@@ -18,7 +19,8 @@ module Ordonnateur
     Plan = Struct.new(
       :scope, :settings_path, :card_path, :settings_text_before, :settings_text_after, :card_text_before,
       :card_text_after, :settings_sha, :settings_mode, :card_before, :card_after, :verdicts, :refusals,
-      :notes, :event, :before_ids, :after_ids, :mode, :released_events, keyword_init: true
+      :notes, :event, :before_ids, :after_ids, :mode, :released_events, :classification, :needs_confirm,
+      :hold_required, :deleted, keyword_init: true
     )
 
     SESSION_NOTE = "Antigravity reads hooks when a session starts; running sessions may keep the order they loaded."
@@ -438,6 +440,46 @@ module Ordonnateur
       finish(event, "members", before, named.map(&:id), leftovers: leftovers)
     end
 
+    def delete_target(ref)
+      raise Refused, "refused:\n  #{ref}: is a Codex hook; Codex files are read-only" if ref.start_with?("codex:")
+      raise Refused, "refused:\n  #{ref}: is not an Antigravity hook" if ref.start_with?("cc:", "hm:")
+
+      hook = Inventory.resolve(@hooks, ref)
+      reason = HookScript.hook_refusal(hook)
+      reason ||= "is in the #{hook.scope} hooks, not the #{@scope} hooks of this change" if hook.scope != @scope
+      if reason
+        @refusals << "#{Inventory.describe(hook)}: #{reason}"
+        fail!
+      end
+      hook
+    end
+
+    def plan_delete(ref)
+      hook = delete_target(ref)
+      event = hook.event
+      prepare(hook.source_file)
+      member = Harnesses::Antigravity.member?(hook)
+      entry = member ? ledger_entry(hook, event) : nil
+      if member && entry.nil?
+        @refusals << "#{hook.id}: ordonnateur has no record of where this hook came from"
+        fail!
+      end
+      before = @file_hooks.select { |item| item.event == event && item.hook_name == hook.hook_name }.map(&:id)
+      unit = resolve_unit(hook)
+      detach([unit])
+      if member
+        @work["events"][event].delete_if { |item| item.equal?(entry) }
+        @work["events"].delete(event) if @work["events"][event].empty?
+      end
+      @data.delete(SPEC) if @data[SPEC].is_a?(Hash) && (@data[SPEC].keys - ["enabled"]).empty?
+      @notes << "removes the handler #{hook.id} from #{@path}"
+      @notes << "removes its record from the ordonnateur ledger" if member
+      plan = finish(event, member ? "members" : "in_place", before, before - [hook.id])
+      plan.mode = "delete"
+      HookScript.delete_fields("antigravity", @scope, hook).each { |name, value| plan[name] = value }
+      plan
+    end
+
     def plan_release(event)
       check_event!(event) if event
       path = release_file(event)
@@ -601,7 +643,7 @@ module Ordonnateur
       end
     end
 
-    def apply(plan)
+    def apply(plan, plan_id: nil)
       return false unless changed?(plan)
 
       plan.verdicts.each do |path, verdict|
@@ -629,7 +671,7 @@ module Ordonnateur
           plan.card_path, plan.card_text_after, mode: Harnesses::Antigravity.mode_of(plan.card_path) || 0o600
         )
       end
-      emit(plan)
+      plan.deleted ? HookScript::Trail.announce_delete(@ports, plan, plan_id, @via, @at) : emit(plan)
       true
     end
 

@@ -108,6 +108,23 @@
   overflow-wrap: anywhere;
 }
 
+.od-insp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--control-xs);
+}
+
+.od-insp-command {
+  cursor: pointer;
+}
+
+.od-insp-command:hover {
+  border-color: var(--border-strong);
+  background: var(--row-hover);
+}
+
 .od-insp-status {
   display: flex;
   flex-wrap: wrap;

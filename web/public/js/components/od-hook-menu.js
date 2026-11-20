@@ -29,11 +29,12 @@ const LABELS = {
   release: "Release from sequence",
   unguard: "Unguard",
   guard: "Guard",
-  select: "Show details",
+  select: "Show in inspector",
+  details: "Details",
   copy: "Copy id",
 };
 
-const GROUPS = [["up", "down", "first", "last"], ["sequence", "release"], ["unguard", "guard"], ["select", "copy"]];
+const GROUPS = [["up", "down", "first", "last"], ["sequence", "release"], ["unguard", "guard"], ["select", "details", "copy"]];
 
 export function scopeLabel(scope) {
   return SCOPE_LABELS[scope] || scope;
@@ -109,7 +110,7 @@ export function agMoves(hook, context) {
 }
 
 export function allowedActions(hook, context) {
-  const allowed = ["select", "copy"];
+  const allowed = ["select", "details", "copy"];
   if (isAntigravity(hook)) {
     const moves = agMoves(hook, context);
     if (!moves) return allowed;
@@ -156,6 +157,15 @@ function draftSentence(scope, context) {
   return `Draft: ${plural(count(scope, context.project))}.`;
 }
 
+function restoreTarget(hook) {
+  const id = window.CSS && CSS.escape ? CSS.escape(hook.id) : hook.id;
+  return () => document.querySelector(`.od-card[data-hook-id="${id}"]`) || document.querySelector(`.od-row[data-hook-id="${id}"] .od-program`);
+}
+
+export function openDetails(hook, trigger, tab = "overview") {
+  document.dispatchEvent(new CustomEvent("od-hook-details", { detail: { hook, trigger, tab, restore: restoreTarget(hook) } }));
+}
+
 function copyId(hook) {
   const write = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(hook.id) : Promise.reject(new Error("no clipboard"));
   write.then(
@@ -167,6 +177,10 @@ function copyId(hook) {
 export function perform(action, hook, context, trigger) {
   if (action === "select") {
     document.dispatchEvent(new CustomEvent("od-hook-select", { detail: { hook, trigger } }));
+    return true;
+  }
+  if (action === "details") {
+    openDetails(hook, trigger);
     return true;
   }
   if (action === "copy") {
@@ -273,7 +287,7 @@ export function shortcut(event, hook, context) {
     else if (event.key === "g") {
       const allowed = allowedActions(hook, context);
       action = allowed.includes("unguard") ? "unguard" : allowed.includes("guard") ? "guard" : null;
-    }
+    } else if (event.key === "d") action = "details";
   }
   if (!action) return false;
   if (!allowedActions(hook, context).includes(action)) return false;
